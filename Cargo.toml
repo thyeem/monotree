@@ -1,0 +1,13 @@
+[package]
+name = "binradix"
+version = "0.1.0"
+authors = ["Francis <thyeem@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+rand = "0.7.3"
+hex = "0.4.1"
+blake2-rfc = "0.2.18"
+timeit = "0.1.2"
+hashbrown = "0.7"
+starling = "3.1.3"
