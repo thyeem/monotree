@@ -2,18 +2,19 @@
 
 use crate::{BitsResult, BytesResult, Node, ParseResult, Proof};
 use blake2_rfc::blake2b::{blake2b, Blake2bResult};
+use std::cmp;
 extern crate hex;
 
 #[macro_export]
 macro_rules! max {
     ($x: expr) => ($x);
-    ($x: expr, $($e: expr),+) => (std::cmp::max($x, max!($($e),*)));
+    ($x: expr, $($e: expr),+) => (cmp::max($x, max!($($e),*)));
 }
 
 #[macro_export]
 macro_rules! min {
     ($x: expr) => ($x);
-    ($x: expr, $($e: expr),+) => (std::cmp::min($x, min!($($e),*)));
+    ($x: expr, $($e: expr),+) => (cmp::min($x, min!($($e),*)));
 }
 
 #[macro_export]
@@ -124,7 +125,7 @@ pub fn type_from_bytes(bytes: &[u8]) -> Node {
 
 pub fn type_from_parsed(h: &[u8], b: &[bool], H: &[u8], B: &[bool]) -> Node {
     match (h.is_empty(), b.is_empty(), H.is_empty(), B.is_empty()) {
-        (_, _, true, true) => Node::Soft,
+        (_, false, true, true) => Node::Soft,
         (false, false, false, false) => Node::Hard,
         _ => unreachable!(),
     }
@@ -139,19 +140,19 @@ pub fn encode_node(h: &[u8], bits: &[bool], right: bool) -> BytesResult {
     }
 }
 
-pub fn decode_node(node: &[u8], size: usize, right: bool) -> ParseResult {
-    let l = node.len();
+pub fn decode_node(bytes: &[u8], size: usize, right: bool) -> ParseResult {
+    let l = bytes.len();
     let n: usize = if right { 0 } else { size };
-    let nbit = nbit_u16!(&node[n..n + 2]);
+    let nbit = nbit_u16!(&bytes[n..n + 2]);
     let nbyte = nbyte!(nbit);
     let r = match nbit % 8 {
         0 => 0usize,
         _ => (8 - (nbit % 8)) as usize,
     };
-    let bits = bytes_to_slicebit(&node[n + 2..n + 2 + nbyte], r + 1, nbyte * 8 + 1)?;
+    let bits = bytes_to_slicebit(&bytes[n + 2..n + 2 + nbyte], r + 1, nbyte * 8 + 1)?;
     match right {
-        true => Ok((node[l - size..l].to_vec(), bits, n + 2 + nbyte)),
-        false => Ok((node[..size].to_vec(), bits, n + 2 + nbyte)),
+        true => Ok((bytes[l - size..l].to_vec(), bits, n + 2 + nbyte)),
+        false => Ok((bytes[..size].to_vec(), bits, n + 2 + nbyte)),
     }
 }
 

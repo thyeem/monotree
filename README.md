@@ -26,24 +26,21 @@ How to generate a new binary radix tree
                 )
             })
             .collect();
-        Ok(())
 
         /// init tree using either MemDB or RocksDB
         let mut tree = tree::BinaryRadix::<database::MemoryDB>::new(HASH_BYTE, "");
         // let mut tree = tree::BinaryRadix::<database::RocksdbDB>::new(HASH_BYTE, "");
         let mut root = tree.new_tree()?;
 
-        /// Simple, but rubust basic operation test.  
+        /// Simple, but robust basic operation test.
         /// Uncomment the last part when testing inclusion-merkle-proof as well.
-        for (k, v) in kv_pair {
+        for (key, value) in kv_pair {
             root = tree.update(&root, &key, &value)?;
-            assert_eq!(t.get_leaf(&r, &k).unwrap(), *v);
-            // let pf = t.get_merkle_proof(&r, &k)?;
-            // assert_eq!(verify_proof(32, &r, &v, &pf), true);
+            assert_eq!(tree.get_leaf(&root, &key).unwrap(), *value);
+            // let proof = tree.get_merkle_proof(&root, &key)?;
+            // assert_eq!(verify_proof(HASH_BYTE, &root, &value, &proof), true);
         }
+        Ok(())
     }
 }
-
-
-
  ```

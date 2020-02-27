@@ -26,11 +26,11 @@ use crate::{
 ///
 ///     //--- simple, but rubust basic operation test.
 ///     //--- uncomment the last part when testing inclusion-merkle-proof
-///     for (k, v) in kv_pair {
+///     for (key, value) in kv_pair {
 ///        root = tree.update(&root, &key, &value)?;
-///        assert_eq!(t.get_leaf(&r, &k).unwrap(), *v);
-///        // let pf = t.get_merkle_proof(&r, &k)?;
-///        // assert_eq!(verify_proof(32, &r, &v, &pf), true);
+///        assert_eq!(tree.get_leaf(&root, &key).unwrap(), *value);
+///        // let proof = tree.get_merkle_proof(&root, &key)?;
+///        // assert_eq!(verify_proof(HASH_BYTE, &root, &value, &proof), true);
 ///    }
 /// ```
 
