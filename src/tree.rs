@@ -1,204 +1,210 @@
-#![allow(non_snake_case)]
-
+use crate::consts::*;
 use crate::utils::*;
-use crate::{
-    BytesResult, BytesTuple, Database, Node, ParseHardResult, ParseSoftResult, Proof, ProofResult,
-    Result,
-};
+use crate::{Cell, Database, Errors, Hash, Node, Proof, Result, Unit};
+use blake2_rfc::blake2b::blake2b;
+use std::ops::Range;
 
-/// How to generate a new binary radix tree
+/// Example: How to use MonoTree
 /// ```rust, ignore
-///     //--- gen random key-value pair
-///     let const HASH_BYTE = 32;
-///     let kv_pair: Vec<BytesTuple> = (0..10000)
-///         .map(|_| {
-///             (
-///                 random_bytes(HASH_BYTE).unwrap(),
-///                 random_bytes(HASH_BYTE).unwrap()
-///             )
-///         })
+///     //--- prepare random key-value pair like:
+///     type Hash = [u8; HASH_LEN]
+///     let pairs: Vec<(Hash, Hash)> = (0..1000)
+///         .map(|_| (random_bytes(HASH_LEN), random_bytes(HASH_LEN)))
 ///         .collect();
-
-///     //--- init tree using either MemDB or RocksDB
-///     let mut tree = tree::BinaryRadix::<database::MemoryDB>::new(HASH_BYTE, "");
-///     let mut tree = tree::BinaryRadix::<database::RocksdbDB>::new(HASH_BYTE, "");
-///     let mut root = tree.new_tree()?;
 ///
-///     //--- simple, but rubust basic operation test.
-///     //--- uncomment the last part when testing inclusion-merkle-proof
-///     for (key, value) in kv_pair {
-///        root = tree.update(&root, &key, &value)?;
-///        assert_eq!(tree.get_leaf(&root, &key).unwrap(), *value);
-///        // let proof = tree.get_merkle_proof(&root, &key)?;
-///        // assert_eq!(verify_proof(HASH_BYTE, &root, &value, &proof), true);
-///    }
+///     //--- init tree using either MemDB or RocksDB
+///     let mut tree = tree::MonoTree::<MemoryDB>::new("MemDB");
+///     // let mut tree = tree::MonoTree::<RocksdbDB>::new("RocksDB");
+///     let mut root = tree.new_tree();
+///
+///     //--- functional test: insert/get
+///     pairs.iter().for_each(|(key, value)| {
+///         root = tree.insert(root.as_ref(), key, value)?;
+///         assert_eq!(tree.get(root.as_ref(), key).unwrap(), *value);
+///    });
 /// ```
 
-pub struct BinaryRadix<T>
+pub struct MonoTree<T>
 where
     T: Database,
 {
-    db: T,
-    pub nbyte: usize,
+    pub db: T,
 }
 
-impl<T> BinaryRadix<T>
+impl<T> MonoTree<T>
 where
     T: Database,
 {
-    pub fn new(nbyte: usize, dbpath: &str) -> Self {
+    pub fn new(dbpath: &str) -> Self {
         let db = Database::new(dbpath);
-        BinaryRadix { db, nbyte }
+        MonoTree { db }
     }
 
-    pub fn new_tree(&mut self) -> BytesResult {
-        self.db.put(&[], vec![])?;
-        Ok(vec![])
+    pub fn new_tree(&mut self) -> Option<Hash> {
+        None
     }
 
-    fn encode_soft_node(&self, h: &[u8], b: &[bool]) -> BytesResult {
-        Ok([encode_node(h, b, false)?.as_slice(), &[0u8]].concat())
+    pub fn insert(&mut self, root: Option<&Hash>, key: &Hash, leaf: &Hash) -> Option<Hash> {
+        match root {
+            None => {
+                let (hash, path, range) = (leaf.to_owned(), key.to_vec(), 0..key.len() * 8);
+                self.put_node(Node::new(Some(Unit { hash, path, range }), None))
+                    .ok()
+            }
+            Some(root) => self.put(root, key, 0..key.len() * 8, leaf).ok(),
+        }
     }
 
-    fn decode_soft_node(&self, bytes: &[u8]) -> ParseSoftResult {
-        let (h, b, _) = decode_node(&bytes[..bytes.len() - 1], self.nbyte, false)?;
-        Ok((h, b))
-    }
-
-    fn encode_hard_node(&self, h: &[u8], b: &[bool], H: &[u8], B: &[bool]) -> BytesResult {
-        Ok([
-            encode_node(h, b, false)?.as_slice(),
-            encode_node(H, B, true)?.as_slice(),
-            &[1u8],
-        ]
-        .concat())
-    }
-
-    fn decode_hard_node(&self, bytes: &[u8]) -> ParseHardResult {
-        let (h, b, size) = decode_node(&bytes[..bytes.len() - 1], self.nbyte, false)?;
-        let (H, B, _) = decode_node(&bytes[size..bytes.len() - 1], self.nbyte, true)?;
-        Ok((h, b, H, B))
-    }
-
-    fn gen_node(&self, h: &[u8], b: &[bool], H: &[u8], B: &[bool]) -> BytesResult {
-        match type_from_parsed(h, b, H, B) {
-            Node::Soft => self.encode_soft_node(h, b),
-            Node::Hard => match is_rbit!(b) {
-                true => self.encode_hard_node(H, B, h, b),
-                false => self.encode_hard_node(h, b, H, B),
+    fn get_node_cells(&self, hash: &Hash, right: bool) -> Result<(Cell, Cell)> {
+        let bytes = self.db.get(hash)?;
+        match Node::from_bytes(&bytes)? {
+            Node::Soft(cell) => Ok((cell, None)),
+            Node::Hard(lc, rc) => match right {
+                true => Ok((rc, lc)),
+                false => Ok((lc, rc)),
             },
         }
     }
 
-    fn put_node(&mut self, h: &[u8], b: &[bool], H: &[u8], B: &[bool]) -> BytesResult {
-        let node = self.gen_node(h, b, H, B)?;
-        let hash = hash(self.nbyte, &node)?;
-        self.db.put(&hash, node)?;
-        Ok(hash)
+    fn put_node(&mut self, node: Node) -> Result<Hash> {
+        let bytes = node.to_bytes()?;
+        let hash = blake2b(HASH_LEN, &[], &bytes);
+        self.db.put(hash.as_bytes(), bytes)?;
+        slice_to_hash(hash.as_bytes())
     }
 
-    fn get_node(&self, hash: &[u8], bits: &[bool]) -> ParseHardResult {
-        let node = self.db.get(hash)?;
-        match type_from_bytes(&node) {
-            Node::Soft => {
-                let (h, b) = self.decode_soft_node(&node)?;
-                Ok((h, b, vec![], vec![]))
+    fn put(&mut self, root: &Hash, key: &[u8], range: Range<usize>, leaf: &Hash) -> Result<Hash> {
+        let (lc, rc) = self.get_node_cells(root, bit(key, range.start))?;
+        let unit = lc.as_ref().unwrap();
+        let n = len_lcp(&unit.path, &unit.range, key, &range);
+        match n {
+            n if n == 0 => {
+                let (hash, path) = (leaf.to_owned(), key.to_vec());
+                self.put_node(Node::new(lc, Some(Unit { hash, path, range })))
             }
-            Node::Hard => {
-                let (h, b, H, B) = self.decode_hard_node(&node)?;
-                match is_rbit!(bits) {
-                    true => Ok((H, B, h, b)),
-                    false => Ok((h, b, H, B)),
-                }
+            n if n == range.end - range.start => {
+                let (hash, unit) = (leaf.to_owned(), lc.unwrap());
+                self.put_node(Node::new(Some(Unit { hash, ..unit }), rc))
+            }
+            n if n == unit.range.end - unit.range.start => {
+                let (q, range) = offsets(&range, n, false);
+                let hash = self.put(&unit.hash, &key[q..], range, leaf)?;
+                let unit = lc.unwrap();
+                self.put_node(Node::new(Some(Unit { hash, ..unit }), rc))
+            }
+            _ => {
+                let (q, range) = offsets(&range, n, false);
+                let (hash, path) = (leaf.to_owned(), key[q..].to_vec());
+                let ru = Unit { hash, path, range };
+
+                let (q, range) = offsets(&unit.range, n, false);
+                let (hash, path) = (unit.hash, unit.path[q..].to_vec());
+                let lu = Unit { hash, path, range };
+
+                let (q, range) = offsets(&unit.range, n, true);
+                let hash = self.put_node(Node::new(Some(lu), Some(ru)))?;
+                let path = unit.path[..q].to_vec();
+                self.put_node(Node::new(Some(Unit { hash, path, range }), rc))
             }
         }
     }
 
-    fn put(&mut self, root: &[u8], bits: &[bool], leaf: &[u8]) -> BytesResult {
-        let (h, b, H, B) = self.get_node(root, bits)?;
-        let n = len_lcp(&b, bits);
-        if n == 0 {
-            self.put_node(&h, &b, leaf, bits)
-        } else if n == bits.len() {
-            self.put_node(leaf, &b, &H, &B)
-        } else if n == b.len() {
-            let h = self.put(&h, &bits[n..], leaf)?;
-            self.put_node(&h, &b, &H, &B)
-        } else {
-            let (h, b) = (self.put_node(&h, &b[n..], leaf, &bits[n..])?, &b[..n]);
-            self.put_node(&h, &b, &H, &B)
+    pub fn get(&self, root: Option<&Hash>, key: &[u8]) -> Option<Hash> {
+        match root {
+            None => None,
+            Some(root) => self.find_key(root, key, 0..key.len() * 8).ok(),
         }
     }
 
-    pub fn update(&mut self, root: &[u8], key: &[u8], leaf: &[u8]) -> BytesResult {
-        let bits = bytes_to_bits(key)?;
-        if root.is_empty() {
-            self.put_node(leaf, &bits, &[], &[])
-        } else {
-            self.put(root, &bits, leaf)
+    fn find_key(&self, root: &Hash, key: &[u8], range: Range<usize>) -> Result<Hash> {
+        let (cell, _) = self.get_node_cells(root, bit(key, range.start))?;
+        let unit = cell.as_ref().unwrap();
+        let n = len_lcp(&unit.path, &unit.range, key, &range);
+        match n {
+            n if n == range.end - range.start => Ok(unit.hash),
+            n if n == unit.range.end - unit.range.start => {
+                let (q, range) = offsets(&range, n, false);
+                self.find_key(&unit.hash, &key[q..], range)
+            }
+            _ => Err(Errors::new("Not found")),
         }
     }
 
-    pub fn get_leaf(&self, root: &[u8], key: &[u8]) -> BytesResult {
-        let bits = bytes_to_bits(key)?;
-        return self.get(root, &bits);
-    }
-
-    fn get(&self, root: &[u8], bits: &[bool]) -> BytesResult {
-        let (h, b, _, _) = self.get_node(root, bits)?;
-        let n = len_lcp(&b, bits);
-        if n == bits.len() {
-            Ok(h)
-        } else if n == b.len() {
-            self.get(&h, &bits[n..])
-        } else {
-            Ok(vec![])
-        }
-    }
-
-    /// generating proof -------------------------------------------------------
-    /// in order to prove proofs, use verify_proof() in utils.rs
+    /// Merkle proof secion: verifying inclusion of data ----------------------
+    /// In order to prove proofs, use verify_proof() at the end of file below.
+    /// Example:
     /// ```rust, ignore
-    ///     let proof = tree.get_merkle_proof(&root, &key)?;
-    ///     assert_eq!(utils::verify_proof(32, &root, &value, &proof), true);
+    ///     // suppose (key: Hash, value: Hash) alreay prepared.
+    ///     // let mut root = ...
+    ///     root = tree.insert(&root, &key, &value);
+    ///     ...
+    ///     let leaf = tree.get(root.as_ref(), &key).unwrap();
+    ///     let proof = tree.get_merkle_proof(root.as_ref(), &key).unwrap();
+    ///     assert_eq!(tree::verify_proof(root.as_ref(), &leaf, &proof), true);
     /// ```
 
-    pub fn get_merkle_proof(&self, root: &[u8], key: &[u8]) -> ProofResult {
+    pub fn get_merkle_proof(&self, root: Option<&Hash>, key: &[u8]) -> Option<Proof> {
         let mut proof: Proof = Vec::new();
-        if root.is_empty() {
-            Ok(proof)
-        } else {
-            let bits = bytes_to_bits(key)?;
-            Ok(self.get_proof(root, &bits, &mut proof)?)
+        match root {
+            None => None,
+            Some(root) => self.gen_proof(root, key, 0..key.len() * 8, &mut proof).ok(),
         }
     }
 
-    fn get_proof(&self, root: &[u8], bits: &[bool], proof: &mut Proof) -> ProofResult {
-        let (h, b, H, B) = self.get_node(root, bits)?;
-        let n = len_lcp(&b, bits);
-        if n == bits.len() {
-            let node = self.gen_node(&h, bits, &H, &B)?;
-            proof.push(self.encode_proof(&node, bits)?);
-            return Ok(proof.to_owned());
+    fn gen_proof(
+        &self,
+        root: &Hash,
+        key: &[u8],
+        range: Range<usize>,
+        proof: &mut Proof,
+    ) -> Result<Proof> {
+        let bytes = self.db.get(root)?;
+        let right = bit(key, range.start);
+        let (cell, _) = self.get_node_cells(root, right)?;
+        let unit = cell.as_ref().unwrap();
+        let n = len_lcp(&unit.path, &unit.range, key, &range);
+        match n {
+            n if n == range.end - range.start => {
+                proof.push(self.encode_proof(&bytes, right)?);
+                Ok(proof.to_owned())
+            }
+            n if n == unit.range.end - unit.range.start => {
+                proof.push(self.encode_proof(&bytes, right)?);
+                let (q, range) = offsets(&range, n, false);
+                self.gen_proof(&unit.hash, &key[q..], range, proof)
+            }
+            _ => Err(Errors::new("Abort: key not found")),
         }
-        if n == b.len() {
-            let node = self.gen_node(&h, &b, &H, &B)?;
-            proof.push(self.encode_proof(&node, bits)?);
-            return Ok(self.get_proof(&h, &bits[n..], proof)?);
-        }
-        Ok(proof.to_owned())
     }
 
-    fn encode_proof(&self, bytes: &[u8], bits: &[bool]) -> Result<BytesTuple> {
-        match type_from_bytes(&bytes) {
-            Node::Soft => Ok((vec![0u8], bytes[self.nbyte..].to_vec())),
-            Node::Hard => match is_rbit!(bits) {
+    fn encode_proof(&self, bytes: &[u8], right: bool) -> Result<(bool, Vec<u8>)> {
+        match Node::from_bytes(bytes)? {
+            Node::Soft(_) => Ok((false, bytes[HASH_LEN..].to_vec())),
+            Node::Hard(_, _) => match right {
                 true => Ok((
-                    vec![1u8],
-                    [&bytes[..bytes.len() - 1 - self.nbyte], &[1u8]].concat(),
+                    true,
+                    [&bytes[..bytes.len() - HASH_LEN - 1], &[0x01]].concat(),
                 )),
-                false => Ok((vec![0u8], bytes[self.nbyte..].to_vec())),
+                false => Ok((false, bytes[HASH_LEN..].to_vec())),
             },
         }
     }
+}
+
+/// No need to be a member of MonoTree.
+/// This verification must be called independantly upon request.
+pub fn verify_proof(root: Option<&Hash>, leaf: &Hash, proof: &Proof) -> bool {
+    let mut hash = leaf.to_vec();
+    proof.iter().rev().for_each(|(right, cut)| match *right {
+        false => {
+            let o = [&hash[..], &cut[..]].concat();
+            hash = blake2b(HASH_LEN, &[], &o).as_bytes().to_vec();
+        }
+        true => {
+            let l = cut.len();
+            let o = [&cut[..l - 1], &hash[..], &cut[l - 1..]].concat();
+            hash = blake2b(HASH_LEN, &[], &o).as_bytes().to_vec();
+        }
+    });
+    root.unwrap().to_vec() == hash
 }
