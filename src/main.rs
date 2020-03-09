@@ -8,7 +8,7 @@ use starling::hash_tree::HashTree;
 use starminer::database::MemoryDatabase;
 use starminer::dynamic_smt::SparseMerkletrie;
 
-const N: usize = 50000;
+const N: usize = 10000;
 
 fn main() {
     benchmark();
@@ -69,13 +69,13 @@ fn benchmark() {
     startree();
     merklebit();
     monotree();
-    monotree_rocksdb();
+    // monotree_rocksdb();
     // funtional_test_monotree(&pairs);
 }
 
 fn funtional_test_monotree(pairs: &Vec<(Hash, Hash)>) {
     let mut tree = MonoTree::<MemoryDB>::new("memdb");
-    // let mut tree = MonoTree::<RocksDB>::new("sofiaDB");
+    // let mut tree = MonoTree::<RocksDB>::new("testdb");
     let mut root = tree.new_tree();
     pairs.iter().for_each(|(key, value)| {
         // insert a key

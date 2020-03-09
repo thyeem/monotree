@@ -45,9 +45,9 @@ macro_rules! fmtime {
 /// during NUMBER_OF_LOOP-times run and then print and return it.
 /// When NUMBER_OF_LOOP is 0, just run once without STDOUT
 ///
-/// perf!(NUMBER_OF_LOOP, {CODE BLOCK} ) -> nano secs as u128
+/// perf!(NUMBER_OF_LOOP, LABEL, {CODE BLOCK} ) -> nano secs as u128
 /// Example:
-///     perf!(NUMBER_OF_LOOP, {
+///     perf!(NUMBER_OF_LOOP, LABEL, {
 ///         // HERE-any-code-block-to-measure
 ///     });
 macro_rules! perf {

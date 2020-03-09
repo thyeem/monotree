@@ -19,7 +19,7 @@ use std::ops::Range;
 ///
 ///     //--- functional test: insert/get
 ///     pairs.iter().for_each(|(key, value)| {
-///         root = tree.insert(root.as_ref(), key, value)?;
+///         root = tree.insert(root.as_ref(), key, value);
 ///         assert_eq!(tree.get(root.as_ref(), key).unwrap(), *value);
 ///    });
 /// ```

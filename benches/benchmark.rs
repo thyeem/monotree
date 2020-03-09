@@ -64,25 +64,24 @@ fn bench_monotree(
     mut root: Option<Hash>,
     pairs: &Vec<(Hash, Hash)>,
 ) {
-    for (key, value) in pairs {
+    pairs.iter().for_each(|(key, value)| {
         root = tree.insert(root.as_ref(), key, value);
-    }
+    });
 }
 
 fn bench_startree(tree: &mut SparseMerkletrie<MemoryDatabase>, pairs: &Vec<(Hash, Hash)>) {
-    for (key, value) in pairs {
+    pairs.iter().for_each(|(key, value)| {
         tree.put(key, value);
-    }
+    });
 }
 
 fn bench_merklebit(tree: &mut HashTree<Hash>, mut root: Option<Hash>, pairs: &Vec<(Hash, Hash)>) {
-    // let mut root_value: Hash;
-    for (key, value) in pairs {
+    pairs.iter().for_each(|(key, value)| {
         root = Some(
             tree.insert(root.as_ref(), &mut [*key], &[value.to_vec()])
                 .unwrap(),
         );
-    }
+    });
 }
 
 criterion_group!(benches, bench_group);
