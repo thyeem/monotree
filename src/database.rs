@@ -18,7 +18,6 @@ impl Database for MemoryDB {
             dbname: dbname.to_string(),
         }
     }
-
     fn get(&self, key: &[u8]) -> Result<Vec<u8>> {
         self.db.get(key).map_or(Ok(vec![]), |r| Ok(r.to_vec()))
     }
@@ -50,7 +49,6 @@ impl Database for RocksDB {
             dbpath: dbpath.to_string(),
         }
     }
-
     fn get(&self, key: &[u8]) -> Result<Vec<u8>> {
         let db = self.db.lock().unwrap();
         match db.get(key) {

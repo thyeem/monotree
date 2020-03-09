@@ -2,25 +2,9 @@ extern crate rocksdb;
 use crate::consts::HASH_LEN;
 use std::error::Error;
 use std::fmt;
-use std::ops::Range;
 
 pub type Result<T> = std::result::Result<T, Errors>;
-pub type Proof = Vec<(bool, Vec<u8>)>;
 pub type Hash = [u8; HASH_LEN];
-pub type Cell = Option<Unit>;
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Node {
-    Soft(Cell),
-    Hard(Cell, Cell),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Unit {
-    pub hash: Hash,
-    pub path: Vec<u8>,
-    pub range: Range<usize>,
-}
 
 #[derive(Debug)]
 pub struct Errors {
@@ -56,6 +40,7 @@ pub trait Database {
 pub mod consts;
 #[macro_use]
 pub mod utils;
+pub mod bits;
 pub mod database;
 pub mod node;
 pub mod tree;

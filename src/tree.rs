@@ -1,8 +1,9 @@
+use crate::bits::Bits;
 use crate::consts::*;
+use crate::node::{Node, Proof, Unit};
 use crate::utils::*;
-use crate::{Cell, Database, Errors, Hash, Node, Proof, Result, Unit};
+use crate::{Database, Errors, Hash, Result};
 use blake2_rfc::blake2b::blake2b;
-use std::ops::Range;
 
 /// Example: How to use MonoTree
 /// ```rust, ignore
@@ -24,16 +25,13 @@ use std::ops::Range;
 ///    });
 /// ```
 
-pub struct MonoTree<T>
-where
-    T: Database,
-{
-    pub db: T,
+pub struct MonoTree<D: Database> {
+    db: D,
 }
 
-impl<T> MonoTree<T>
+impl<D> MonoTree<D>
 where
-    T: Database,
+    D: Database,
 {
     pub fn new(dbpath: &str) -> Self {
         let db = Database::new(dbpath);
@@ -47,22 +45,11 @@ where
     pub fn insert(&mut self, root: Option<&Hash>, key: &Hash, leaf: &Hash) -> Option<Hash> {
         match root {
             None => {
-                let (hash, path, range) = (leaf.to_owned(), key.to_vec(), 0..key.len() * 8);
-                self.put_node(Node::new(Some(Unit { hash, path, range }), None))
+                let (hash, bits) = (leaf.to_owned(), Bits::new(key));
+                self.put_node(Node::new(Some(Unit { hash, bits: bits }), None))
                     .ok()
             }
-            Some(root) => self.put(root, key, 0..key.len() * 8, leaf).ok(),
-        }
-    }
-
-    fn get_node_cells(&self, hash: &Hash, right: bool) -> Result<(Cell, Cell)> {
-        let bytes = self.db.get(hash)?;
-        match Node::from_bytes(&bytes)? {
-            Node::Soft(cell) => Ok((cell, None)),
-            Node::Hard(lc, rc) => match right {
-                true => Ok((rc, lc)),
-                false => Ok((lc, rc)),
-            },
+            Some(root) => self.put(root, Bits::new(key), leaf).ok(),
         }
     }
 
@@ -73,38 +60,36 @@ where
         slice_to_hash(hash.as_bytes())
     }
 
-    fn put(&mut self, root: &Hash, key: &[u8], range: Range<usize>, leaf: &Hash) -> Result<Hash> {
-        let (lc, rc) = self.get_node_cells(root, bit(key, range.start))?;
+    fn put(&mut self, root: &Hash, bits: Bits, leaf: &Hash) -> Result<Hash> {
+        let bytes = self.db.get(root)?;
+        let (lc, rc) = Node::cells_from_bytes(&bytes, bits.first())?;
         let unit = lc.as_ref().unwrap();
-        let n = len_lcp(&unit.path, &unit.range, key, &range);
+        let n = Bits::len_common_bits(&unit.bits, &bits);
         match n {
             n if n == 0 => {
-                let (hash, path) = (leaf.to_owned(), key.to_vec());
-                self.put_node(Node::new(lc, Some(Unit { hash, path, range })))
+                let hash = leaf.to_owned();
+                self.put_node(Node::new(lc, Some(Unit { hash, bits: bits })))
             }
-            n if n == range.end - range.start => {
-                let (hash, unit) = (leaf.to_owned(), lc.unwrap());
-                self.put_node(Node::new(Some(Unit { hash, ..unit }), rc))
+            n if n == bits.len() => {
+                let hash = leaf.to_owned();
+                self.put_node(Node::new(Some(Unit { hash, bits }), rc))
             }
-            n if n == unit.range.end - unit.range.start => {
-                let (q, range) = offsets(&range, n, false);
-                let hash = self.put(&unit.hash, &key[q..], range, leaf)?;
-                let unit = lc.unwrap();
+            n if n == unit.bits.len() => {
+                let hash = self.put(&unit.hash, bits.shift(n, false), leaf)?;
+                let unit = unit.to_owned();
                 self.put_node(Node::new(Some(Unit { hash, ..unit }), rc))
             }
             _ => {
-                let (q, range) = offsets(&range, n, false);
-                let (hash, path) = (leaf.to_owned(), key[q..].to_vec());
-                let ru = Unit { hash, path, range };
+                let (hash, bits) = (leaf.to_owned(), bits.shift(n, false));
+                let ru = Unit { hash, bits };
 
-                let (q, range) = offsets(&unit.range, n, false);
-                let (hash, path) = (unit.hash, unit.path[q..].to_vec());
-                let lu = Unit { hash, path, range };
+                let (cloned, unit) = (unit.bits.clone(), unit.to_owned());
+                let (hash, bits) = (unit.hash, unit.bits.shift(n, false));
+                let lu = Unit { hash, bits };
 
-                let (q, range) = offsets(&unit.range, n, true);
                 let hash = self.put_node(Node::new(Some(lu), Some(ru)))?;
-                let path = unit.path[..q].to_vec();
-                self.put_node(Node::new(Some(Unit { hash, path, range }), rc))
+                let bits = cloned.shift(n, true);
+                self.put_node(Node::new(Some(Unit { hash, bits }), rc))
             }
         }
     }
@@ -112,20 +97,18 @@ where
     pub fn get(&self, root: Option<&Hash>, key: &[u8]) -> Option<Hash> {
         match root {
             None => None,
-            Some(root) => self.find_key(root, key, 0..key.len() * 8).ok(),
+            Some(root) => self.find_key(root, Bits::new(key)).ok(),
         }
     }
 
-    fn find_key(&self, root: &Hash, key: &[u8], range: Range<usize>) -> Result<Hash> {
-        let (cell, _) = self.get_node_cells(root, bit(key, range.start))?;
+    fn find_key(&self, root: &Hash, bits: Bits) -> Result<Hash> {
+        let bytes = self.db.get(root)?;
+        let (cell, _) = Node::cells_from_bytes(&bytes, bits.first())?;
         let unit = cell.as_ref().unwrap();
-        let n = len_lcp(&unit.path, &unit.range, key, &range);
+        let n = Bits::len_common_bits(&unit.bits, &bits);
         match n {
-            n if n == range.end - range.start => Ok(unit.hash),
-            n if n == unit.range.end - unit.range.start => {
-                let (q, range) = offsets(&range, n, false);
-                self.find_key(&unit.hash, &key[q..], range)
-            }
+            n if n == bits.len() => Ok(unit.hash),
+            n if n == unit.bits.len() => self.find_key(&unit.hash, bits.shift(n, false)),
             _ => Err(Errors::new("Not found")),
         }
     }
@@ -147,31 +130,23 @@ where
         let mut proof: Proof = Vec::new();
         match root {
             None => None,
-            Some(root) => self.gen_proof(root, key, 0..key.len() * 8, &mut proof).ok(),
+            Some(root) => self.gen_proof(root, Bits::new(key), &mut proof).ok(),
         }
     }
 
-    fn gen_proof(
-        &self,
-        root: &Hash,
-        key: &[u8],
-        range: Range<usize>,
-        proof: &mut Proof,
-    ) -> Result<Proof> {
+    fn gen_proof(&self, root: &Hash, bits: Bits, proof: &mut Proof) -> Result<Proof> {
         let bytes = self.db.get(root)?;
-        let right = bit(key, range.start);
-        let (cell, _) = self.get_node_cells(root, right)?;
+        let (cell, _) = Node::cells_from_bytes(&bytes, bits.first())?;
         let unit = cell.as_ref().unwrap();
-        let n = len_lcp(&unit.path, &unit.range, key, &range);
+        let n = Bits::len_common_bits(&unit.bits, &bits);
         match n {
-            n if n == range.end - range.start => {
-                proof.push(self.encode_proof(&bytes, right)?);
+            n if n == bits.len() => {
+                proof.push(self.encode_proof(&bytes, bits.first())?);
                 Ok(proof.to_owned())
             }
-            n if n == unit.range.end - unit.range.start => {
-                proof.push(self.encode_proof(&bytes, right)?);
-                let (q, range) = offsets(&range, n, false);
-                self.gen_proof(&unit.hash, &key[q..], range, proof)
+            n if n == unit.bits.len() => {
+                proof.push(self.encode_proof(&bytes, bits.first())?);
+                self.gen_proof(&unit.hash, bits.shift(n, false), proof)
             }
             _ => Err(Errors::new("Abort: key not found")),
         }

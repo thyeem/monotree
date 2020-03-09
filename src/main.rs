@@ -70,7 +70,7 @@ fn benchmark() {
     merklebit();
     monotree();
     // monotree_rocksdb();
-    // funtional_test_monotree(&pairs);
+    funtional_test_monotree(&pairs);
 }
 
 fn funtional_test_monotree(pairs: &Vec<(Hash, Hash)>) {
