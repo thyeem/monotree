@@ -1,8 +1,8 @@
 use crate::bits::Bits;
 use crate::consts::*;
-use crate::node::{Node, Proof, Unit};
+use crate::node::{Node, Unit};
 use crate::utils::*;
-use crate::{Database, Errors, Hash, Result};
+use crate::{Database, Errors, Hash, Proof, Result};
 use blake2_rfc::blake2b::blake2b;
 
 /// Example: How to use MonoTree
@@ -46,7 +46,7 @@ where
         match root {
             None => {
                 let (hash, bits) = (leaf, Bits::new(key));
-                self.put_node(Node::new(Some(Unit { hash, bits: bits }), None))
+                self.put_node(Node::new(Some(Unit { hash, bits }), None))
                     .ok()
             }
             Some(root) => self.put(root, Bits::new(key), leaf).ok(),
@@ -149,29 +149,31 @@ where
     fn encode_proof(&self, bytes: &[u8], right: bool) -> Result<(bool, Vec<u8>)> {
         match Node::from_bytes(bytes)? {
             Node::Soft(_) => Ok((false, bytes[HASH_LEN..].to_vec())),
-            Node::Hard(_, _) => match right {
-                true => Ok((
-                    true,
-                    [&bytes[..bytes.len() - HASH_LEN - 1], &[0x01]].concat(),
-                )),
-                false => Ok((false, bytes[HASH_LEN..].to_vec())),
-            },
+            Node::Hard(_, _) => {
+                if right {
+                    Ok((
+                        true,
+                        [&bytes[..bytes.len() - HASH_LEN - 1], &[0x01]].concat(),
+                    ))
+                } else {
+                    Ok((false, bytes[HASH_LEN..].to_vec()))
+                }
+            }
         }
     }
 }
 
 /// No need to be a member of MonoTree.
 /// This verification must be called independantly upon request.
-pub fn verify_proof(root: Option<&Hash>, leaf: &Hash, proof: &Proof) -> bool {
+pub fn verify_proof(root: Option<&Hash>, leaf: &Hash, proof: &[(bool, Vec<u8>)]) -> bool {
     let mut hash = leaf.to_vec();
-    proof.iter().rev().for_each(|(right, cut)| match *right {
-        false => {
-            let o = [&hash[..], &cut[..]].concat();
-            hash = blake2b(HASH_LEN, &[], &o).as_bytes().to_vec();
-        }
-        true => {
+    proof.iter().rev().for_each(|(right, cut)| {
+        if *right {
             let l = cut.len();
             let o = [&cut[..l - 1], &hash[..], &cut[l - 1..]].concat();
+            hash = blake2b(HASH_LEN, &[], &o).as_bytes().to_vec();
+        } else {
+            let o = [&hash[..], &cut[..]].concat();
             hash = blake2b(HASH_LEN, &[], &o).as_bytes().to_vec();
         }
     });

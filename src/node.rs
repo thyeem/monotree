@@ -3,7 +3,6 @@ use crate::consts::HASH_LEN;
 use crate::utils::*;
 use crate::Result;
 
-pub type Proof = Vec<(bool, Vec<u8>)>;
 pub type Cell<'a> = Option<Unit<'a>>;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -30,10 +29,13 @@ impl<'a> Node<'a> {
     pub fn cells_from_bytes(bytes: &'a [u8], right: bool) -> Result<(Cell<'a>, Cell<'a>)> {
         match Node::from_bytes(&bytes)? {
             Node::Soft(cell) => Ok((cell, None)),
-            Node::Hard(lc, rc) => match right {
-                true => Ok((rc, lc)),
-                false => Ok((lc, rc)),
-            },
+            Node::Hard(lc, rc) => {
+                if right {
+                    Ok((rc, lc))
+                } else {
+                    Ok((lc, rc))
+                }
+            }
         }
     }
 
@@ -77,9 +79,10 @@ impl<'a> Node<'a> {
                 Ok([&unit.hash[..], &unit.bits.to_bytes()?, &[0x00]].concat())
             }
             Node::Hard(Some(lu), Some(ru)) => {
-                let (lu, ru) = match ru.bits.first() {
-                    true => (&lu, &ru),
-                    false => (&ru, &lu),
+                let (lu, ru) = if ru.bits.first() {
+                    (&lu, &ru)
+                } else {
+                    (&ru, &lu)
                 };
                 Ok([
                     &lu.hash[..],

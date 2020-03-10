@@ -5,6 +5,7 @@ use std::fmt;
 
 pub type Result<T> = std::result::Result<T, Errors>;
 pub type Hash = [u8; HASH_LEN];
+pub type Proof = Vec<(bool, Vec<u8>)>;
 
 #[derive(Debug)]
 pub struct Errors {
