@@ -1,8 +1,8 @@
 use crate::bits::Bits;
 use crate::consts::*;
-use crate::node::{Node, Proof, Unit};
+use crate::node::{Node, Unit};
 use crate::utils::*;
-use crate::{Database, Errors, Hash, Result};
+use crate::{Database, Errors, Hash, Proof, Result};
 use blake2_rfc::blake2b::blake2b;
 
 /// Example: How to use MonoTree

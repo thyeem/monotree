@@ -3,7 +3,6 @@ use crate::consts::HASH_LEN;
 use crate::utils::*;
 use crate::Result;
 
-pub type Proof = Vec<(bool, Vec<u8>)>;
 pub type Cell<'a> = Option<Unit<'a>>;
 
 #[derive(Debug, Clone, PartialEq)]
