@@ -66,22 +66,16 @@ where
         let unit = lc.as_ref().unwrap();
         let n = Bits::len_common_bits(&unit.bits, &bits);
         match n {
-            n if n == 0 => {
-                let hash = leaf;
-                self.put_node(Node::new(lc, Some(Unit { hash, bits })))
-            }
-            n if n == bits.len() => {
-                let hash = leaf;
-                self.put_node(Node::new(Some(Unit { hash, bits }), rc))
-            }
+            n if n == 0 => self.put_node(Node::new(lc, Some(Unit { hash: leaf, bits }))),
+            n if n == bits.len() => self.put_node(Node::new(Some(Unit { hash: leaf, bits }), rc)),
             n if n == unit.bits.len() => {
                 let hash = &self.put(unit.hash, bits.shift(n, false), leaf)?;
                 let unit = unit.to_owned();
                 self.put_node(Node::new(Some(Unit { hash, ..unit }), rc))
             }
             _ => {
-                let (hash, bits) = (leaf, bits.shift(n, false));
-                let ru = Unit { hash, bits };
+                let bits = bits.shift(n, false);
+                let ru = Unit { hash: leaf, bits };
 
                 let (cloned, unit) = (unit.bits.clone(), unit.to_owned());
                 let (hash, bits) = (unit.hash, unit.bits.shift(n, false));
