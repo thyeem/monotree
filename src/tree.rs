@@ -45,7 +45,7 @@ where
     pub fn insert(&mut self, root: Option<&Hash>, key: &Hash, leaf: &Hash) -> Option<Hash> {
         match root {
             None => {
-                let (hash, bits) = (leaf.to_owned(), Bits::new(key));
+                let (hash, bits) = (leaf, Bits::new(key));
                 self.put_node(Node::new(Some(Unit { hash, bits: bits }), None))
                     .ok()
             }
@@ -60,34 +60,34 @@ where
         slice_to_hash(hash.as_bytes())
     }
 
-    fn put(&mut self, root: &Hash, bits: Bits, leaf: &Hash) -> Result<Hash> {
+    fn put(&mut self, root: &[u8], bits: Bits, leaf: &[u8]) -> Result<Hash> {
         let bytes = self.db.get(root)?;
         let (lc, rc) = Node::cells_from_bytes(&bytes, bits.first())?;
         let unit = lc.as_ref().unwrap();
         let n = Bits::len_common_bits(&unit.bits, &bits);
         match n {
             n if n == 0 => {
-                let hash = leaf.to_owned();
-                self.put_node(Node::new(lc, Some(Unit { hash, bits: bits })))
+                let hash = leaf;
+                self.put_node(Node::new(lc, Some(Unit { hash, bits })))
             }
             n if n == bits.len() => {
-                let hash = leaf.to_owned();
+                let hash = leaf;
                 self.put_node(Node::new(Some(Unit { hash, bits }), rc))
             }
             n if n == unit.bits.len() => {
-                let hash = self.put(&unit.hash, bits.shift(n, false), leaf)?;
+                let hash = &self.put(unit.hash, bits.shift(n, false), leaf)?;
                 let unit = unit.to_owned();
                 self.put_node(Node::new(Some(Unit { hash, ..unit }), rc))
             }
             _ => {
-                let (hash, bits) = (leaf.to_owned(), bits.shift(n, false));
+                let (hash, bits) = (leaf, bits.shift(n, false));
                 let ru = Unit { hash, bits };
 
                 let (cloned, unit) = (unit.bits.clone(), unit.to_owned());
                 let (hash, bits) = (unit.hash, unit.bits.shift(n, false));
                 let lu = Unit { hash, bits };
 
-                let hash = self.put_node(Node::new(Some(lu), Some(ru)))?;
+                let hash = &self.put_node(Node::new(Some(lu), Some(ru)))?;
                 let bits = cloned.shift(n, true);
                 self.put_node(Node::new(Some(Unit { hash, bits }), rc))
             }
@@ -101,13 +101,13 @@ where
         }
     }
 
-    fn find_key(&self, root: &Hash, bits: Bits) -> Result<Hash> {
+    fn find_key(&self, root: &[u8], bits: Bits) -> Result<Hash> {
         let bytes = self.db.get(root)?;
         let (cell, _) = Node::cells_from_bytes(&bytes, bits.first())?;
         let unit = cell.as_ref().unwrap();
         let n = Bits::len_common_bits(&unit.bits, &bits);
         match n {
-            n if n == bits.len() => Ok(unit.hash),
+            n if n == bits.len() => Ok(slice_to_hash(unit.hash)?),
             n if n == unit.bits.len() => self.find_key(&unit.hash, bits.shift(n, false)),
             _ => Err(Errors::new("Not found")),
         }
@@ -134,7 +134,7 @@ where
         }
     }
 
-    fn gen_proof(&self, root: &Hash, bits: Bits, proof: &mut Proof) -> Result<Proof> {
+    fn gen_proof(&self, root: &[u8], bits: Bits, proof: &mut Proof) -> Result<Proof> {
         let bytes = self.db.get(root)?;
         let (cell, _) = Node::cells_from_bytes(&bytes, bits.first())?;
         let unit = cell.as_ref().unwrap();
@@ -146,7 +146,7 @@ where
             }
             n if n == unit.bits.len() => {
                 proof.push(self.encode_proof(&bytes, bits.first())?);
-                self.gen_proof(&unit.hash, bits.shift(n, false), proof)
+                self.gen_proof(unit.hash, bits.shift(n, false), proof)
             }
             _ => Err(Errors::new("Abort: key not found")),
         }

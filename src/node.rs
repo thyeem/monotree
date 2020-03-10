@@ -1,7 +1,7 @@
 use crate::bits::Bits;
 use crate::consts::HASH_LEN;
 use crate::utils::*;
-use crate::{Hash, Result};
+use crate::Result;
 
 pub type Proof = Vec<(bool, Vec<u8>)>;
 pub type Cell<'a> = Option<Unit<'a>>;
@@ -14,7 +14,7 @@ pub enum Node<'a> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unit<'a> {
-    pub hash: Hash,
+    pub hash: &'a [u8],
     pub bits: Bits<'a>,
 }
 
@@ -44,12 +44,16 @@ impl<'a> Node<'a> {
         let start = bytes_to_usize(&bytes[i..i + 2]);
         let end = bytes_to_usize(&bytes[i + 2..i + 4]);
         let n = nbytes_across(start, end);
-        let hash = slice_to_hash(&bytes[g])?;
-        let bits = Bits {
-            path: &bytes[i + 4..i + 4 + n],
-            range: start..end,
-        };
-        Ok((Some(Unit { hash, bits }), i + 4 + n))
+        Ok((
+            Some(Unit {
+                hash: &bytes[g],
+                bits: Bits {
+                    path: &bytes[i + 4..i + 4 + n],
+                    range: start..end,
+                },
+            }),
+            i + 4 + n,
+        ))
     }
 
     pub fn from_bytes(bytes: &'a [u8]) -> Result<Self> {
