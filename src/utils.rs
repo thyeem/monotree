@@ -115,9 +115,10 @@ pub fn nbytes_across(s: usize, e: usize) -> usize {
 
 pub fn offsets(range: &Range<usize>, n: usize, tail: bool) -> (usize, Range<usize>) {
     let x = range.start + n;
-    match tail {
-        true => (nbytes_across(range.start, x), range.start..x),
-        false => (x / 8, x % 8..range.end - 8 * (x / 8)),
+    if tail {
+        (nbytes_across(range.start, x), range.start..x)
+    } else {
+        (x / 8, x % 8..range.end - 8 * (x / 8))
     }
 }
 
@@ -140,7 +141,7 @@ pub fn usize_to_bytes(number: usize) -> Vec<u8> {
             .to_be_bytes()
             .iter()
             .skip_while(|&x| *x == 0x00)
-            .map(|&x| x)
+            .copied()
             .collect(),
     }
 }

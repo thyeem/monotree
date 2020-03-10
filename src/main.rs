@@ -73,7 +73,7 @@ fn benchmark() {
     funtional_test_monotree(&pairs);
 }
 
-fn funtional_test_monotree(pairs: &Vec<(Hash, Hash)>) {
+fn funtional_test_monotree(pairs: &[(Hash, Hash)]) {
     let mut tree = MonoTree::<MemoryDB>::new("memdb");
     // let mut tree = MonoTree::<RocksDB>::new("testdb");
     let mut root = tree.new_tree();

@@ -16,8 +16,12 @@ impl<'a> Bits<'a> {
         }
     }
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        let b = |x: usize| (x as u16).to_be_bytes();
-        Ok([&b(self.range.start), &b(self.range.end), &self.path[..]].concat())
+        Ok([
+            &(self.range.start as u16).to_be_bytes(),
+            &(self.range.end as u16).to_be_bytes(),
+            &self.path[..],
+        ]
+        .concat())
     }
 
     pub fn first(&self) -> bool {
@@ -28,17 +32,22 @@ impl<'a> Bits<'a> {
         self.range.end - self.range.start
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0 || self.path.len() == 0
+    }
+
     pub fn shift(&self, n: usize, tail: bool) -> Self {
         let (q, range) = offsets(&self.range, n, tail);
-        match tail {
-            false => Self {
-                path: &self.path[q..],
-                range,
-            },
-            true => Self {
+        if tail {
+            Self {
                 path: &self.path[..q],
                 range,
-            },
+            }
+        } else {
+            Self {
+                path: &self.path[q..],
+                range,
+            }
         }
     }
 
