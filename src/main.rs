@@ -66,8 +66,8 @@ fn benchmark() {
     };
 
     //--- run-run-run
-    startree();
-    merklebit();
+    // startree();
+    // merklebit();
     monotree();
     // monotree_rocksdb();
     funtional_test_monotree(&pairs);

@@ -1,12 +1,12 @@
 # MonoTree
 Rust implementation of an optimized Sparse Merkle Tree.   
-This is kind of a binary-radix tree based on bitwise branching.   
-
-- Simple and ___very easy to understand___, but ___fast___ and robust.  
-- Fully featured Sparse Merkle Tree (SMT) as a storage including _inclusion proof_ , _non-inclusion proof_, and _its verification_.  
-- Not verbose neither mouthful at all.  
-
+This is a kind of binary-radix tree based on bitwise branching.   
 Currently, no nibbles or lumps of bit (nor 4-bit nibbles neither bytewise). The branching unit is just a single bit.  
+
+## Features
+- Very simple, concise and ___easy to read___, but ___fast___ and robust.  
+- __Fully featured__ Sparse Merkle Tree (SMT) as a storage including _inclusion proof_ , _non-inclusion proof_, and _its verification_.  
+- Not verbose neither mouthful at all.  
 
 ## Dependancies
 This library mostly relies on the _Rust standard library only_ except for hash function (`Blake2`) and database API (`Rocksdb`).
@@ -98,7 +98,7 @@ performs a micro-benchmark based on _Criterion [https://crates.io/crates/criteri
 ```bash
     $ cargo bench
 ```
-and a macroscopic time-scale benchmark was also prepared in _main.rs_ (with broad error-bar).
+and a macroscopic time-scale benchmark was also prepared in _main.rs_ (with wider error bars).
 ```bash
     $ cargo run --release
 ```

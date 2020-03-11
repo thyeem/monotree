@@ -79,11 +79,7 @@ impl<'a> Node<'a> {
                 Ok([&unit.hash[..], &unit.bits.to_bytes()?, &[0x00]].concat())
             }
             Node::Hard(Some(lu), Some(ru)) => {
-                let (lu, ru) = if ru.bits.first() {
-                    (&lu, &ru)
-                } else {
-                    (&ru, &lu)
-                };
+                let (lu, ru) = if ru.bits.first() { (lu, ru) } else { (ru, lu) };
                 Ok([
                     &lu.hash[..],
                     &lu.bits.to_bytes()?,
