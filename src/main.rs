@@ -1,6 +1,8 @@
 #![allow(dead_code, unused_variables, unused_imports)]
+use monotree::bits::Bits;
 use monotree::consts::HASH_LEN;
 use monotree::database::{MemoryDB, RocksDB};
+use monotree::node::{Cell, Node, Unit};
 use monotree::tree::MonoTree;
 use monotree::utils::*;
 use monotree::*;
@@ -12,6 +14,7 @@ const N: usize = 10000;
 
 fn main() {
     benchmark();
+    // benchmark_serde();
 }
 
 fn benchmark() {
@@ -66,11 +69,45 @@ fn benchmark() {
     };
 
     //--- run-run-run
-    // startree();
-    // merklebit();
+    startree();
+    merklebit();
     monotree();
     // monotree_rocksdb();
     funtional_test_monotree(&pairs);
+}
+
+fn benchmark_serde() {
+    let rb: Vec<Hash> = (0..10000)
+        .map(|_| random_bytes(HASH_LEN))
+        .map(|x| (slice_to_hash(&x).unwrap()))
+        .collect();
+
+    let handmade = || {
+        perf!(1, "handmade", {
+            rb.iter().for_each(|x| {
+                let bits = Bits::new(&x[..]);
+                let ser = bits.to_bytes().unwrap();
+                let de = Bits::from_bytes(&ser);
+                // assert_eq!(bits, de);
+                // debug(&ser);
+            })
+        })
+    };
+
+    let serde = || {
+        perf!(1, "serde", {
+            rb.iter().for_each(|x| {
+                let bits = Bits::new(&x[..]);
+                let ser: Vec<u8> = bincode::serialize(&bits).unwrap();
+                let de: Bits = bincode::deserialize(&ser[..]).unwrap();
+                // assert_eq!(bits, de);
+                // debug(&ser);
+            })
+        })
+    };
+
+    serde();
+    handmade();
 }
 
 fn funtional_test_monotree(pairs: &[(Hash, Hash)]) {

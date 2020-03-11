@@ -2,16 +2,16 @@ use crate::bits::Bits;
 use crate::consts::HASH_LEN;
 use crate::utils::*;
 use crate::Result;
+use serde::{Deserialize, Serialize};
 
 pub type Cell<'a> = Option<Unit<'a>>;
 
-#[derive(Debug, Clone, PartialEq)]
 pub enum Node<'a> {
     Soft(Cell<'a>),
     Hard(Cell<'a>, Cell<'a>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Unit<'a> {
     pub hash: &'a [u8],
     pub bits: Bits<'a>,
@@ -43,9 +43,9 @@ impl<'a> Node<'a> {
         let l = bytes.len();
         let i = if right { 0usize } else { HASH_LEN };
         let g = if right { l - HASH_LEN..l } else { 0..HASH_LEN };
-        let start = bytes_to_usize(&bytes[i..i + 2]);
-        let end = bytes_to_usize(&bytes[i + 2..i + 4]);
-        let n = nbytes_across(start, end);
+        let start: u16 = bytes_to_int(&bytes[i..i + 2]);
+        let end: u16 = bytes_to_int(&bytes[i + 2..i + 4]);
+        let n = nbytes_across(start, end) as usize;
         Ok((
             Some(Unit {
                 hash: &bytes[g],

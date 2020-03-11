@@ -28,6 +28,7 @@ impl Database for MemoryDB {
     }
 }
 
+#[allow(deprecated)]
 impl From<rocksdb::Error> for Errors {
     fn from(err: rocksdb::Error) -> Self {
         Errors::new(err.description())

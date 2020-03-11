@@ -24,7 +24,6 @@ use blake2_rfc::blake2b::blake2b;
 ///         assert_eq!(tree.get(root.as_ref(), key).unwrap(), *value);
 ///    });
 /// ```
-
 pub struct MonoTree<D: Database> {
     db: D,
 }
@@ -119,7 +118,6 @@ where
     ///     let proof = tree.get_merkle_proof(root.as_ref(), &key).unwrap();
     ///     assert_eq!(tree::verify_proof(root.as_ref(), &leaf, &proof), true);
     /// ```
-
     pub fn get_merkle_proof(&self, root: Option<&Hash>, key: &[u8]) -> Option<Proof> {
         let mut proof: Proof = Vec::new();
         match root {

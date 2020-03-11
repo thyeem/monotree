@@ -2,6 +2,7 @@ extern crate hex;
 use crate::consts::HASH_LEN;
 use crate::{Hash, Result};
 use blake2_rfc::blake2b::{blake2b, Blake2bResult};
+use num::{NumCast, PrimInt};
 use std::cmp;
 use std::ops::Range;
 
@@ -76,10 +77,7 @@ macro_rules! perf {
     }};
 }
 
-pub fn debug<T>(x: &T)
-where
-    T: std::fmt::Debug,
-{
+pub fn debug<T: std::fmt::Debug>(x: &T) {
     println!("{:?}", x);
 }
 
@@ -91,50 +89,62 @@ pub fn hash_fn_factory(n: usize) -> impl Fn(&[u8]) -> Blake2bResult {
     move |x| blake2b(n, &[], x)
 }
 
+pub fn cast<T: NumCast, U: NumCast>(n: T) -> U {
+    NumCast::from(n).expect("casting PrimInt")
+}
 /// get length of the Longest Common Prefix bits for a set of two bytes
-pub fn len_lcp(a: &[u8], m: &Range<usize>, b: &[u8], n: &Range<usize>) -> usize {
-    (0..min!(m.end - m.start, n.end - n.start))
+pub fn len_lcp<T>(a: &[u8], m: &Range<T>, b: &[u8], n: &Range<T>) -> T
+where
+    T: PrimInt + NumCast,
+    Range<T>: Iterator<Item = T>,
+{
+    let count = (cast(0)..min!(m.end - m.start, n.end - n.start))
         .take_while(|&i| bit(a, m.start + i) == bit(b, n.start + i))
-        .count()
+        .count();
+    cast(count)
 }
 
 /// get ith-index-bit from bytes
 /// note that index i starts from 0
-pub fn bit(bytes: &[u8], i: usize) -> bool {
-    let (q, r) = (i / 8, i % 8);
-    (bytes[q] >> (7 - r) & 0x01) == 0x01
+pub fn bit<T: PrimInt + NumCast>(bytes: &[u8], i: T) -> bool {
+    let q = i.to_usize().expect("bit(): usize") / 8;
+    let r = i.to_u8().expect("bit(): u8") % 8;
+    (bytes[q as usize] >> (7 - r)) & 0x01 == 0x01
 }
 
-pub fn nbytes_across(s: usize, e: usize) -> usize {
-    let n = (e - (s - s % 8)) / 8;
-    match e % 8 {
-        0 => n,
-        _ => n + 1,
+pub fn nbytes_across<T: PrimInt + NumCast>(start: T, end: T) -> T {
+    let n = (end - (start - start % cast(8))) / cast(8);
+    if end % cast(8) == cast(0) {
+        n
+    } else {
+        n + cast(1)
     }
 }
 
-pub fn offsets(range: &Range<usize>, n: usize, tail: bool) -> (usize, Range<usize>) {
+pub fn offsets<T: PrimInt + NumCast>(range: &Range<T>, n: T, tail: bool) -> (T, Range<T>) {
     let x = range.start + n;
+    let e: T = cast(8);
     if tail {
         (nbytes_across(range.start, x), range.start..x)
     } else {
-        (x / 8, x % 8..range.end - 8 * (x / 8))
+        (x / e, x % e..range.end - e * (x / e))
     }
 }
 
-/// convert any big-endian bytes into base10 (decimal number)
-/// slightly slower than usize::from_be_bytes(),
+/// convert any big-endian bytes into base10 integer (decimal number)
+/// slightly slower than {integer}::from_be_bytes(),
 /// but can go with various length of bytes
-pub fn bytes_to_usize(bytes: &[u8]) -> usize {
+pub fn bytes_to_int<T: PrimInt + NumCast>(bytes: &[u8]) -> T {
     let l = bytes.len();
-    (0..l).fold(0, |sum, i| {
+    let sum = (0..l).fold(0, |sum, i| {
         sum + (1 << ((l - i - 1) * 8)) * bytes[i] as usize
-    })
+    });
+    cast(sum)
 }
 
-/// usize::to_be_bytes()'s enough, but need to compress bytes
+/// {integer}::to_be_bytes()'s enough, but sometimes need to compress bytes
 /// cutting down big-endian bytes leading zero
-pub fn usize_to_bytes(number: usize) -> Vec<u8> {
+pub fn int_to_bytes(number: u64) -> Vec<u8> {
     match number {
         0 => vec![0x00],
         _ => number
@@ -155,7 +165,11 @@ pub fn bytes_to_bits(bytes: &[u8]) -> Vec<bool> {
     bytes_to_slicebit(bytes, &(0..bytes.len() * 8))
 }
 
-pub fn bytes_to_slicebit(bytes: &[u8], range: &Range<usize>) -> Vec<bool> {
+pub fn bytes_to_slicebit<T>(bytes: &[u8], range: &Range<T>) -> Vec<bool>
+where
+    T: PrimInt + NumCast,
+    Range<T>: Iterator<Item = T>,
+{
     range.clone().map(|x| bit(bytes, x)).collect()
 }
 
@@ -203,17 +217,15 @@ mod tests {
     }
 
     #[test]
-    fn test_bytes_to_usize() {
-        assert_eq!(
-            bytes_to_usize(&[0x73, 0x6f, 0x66, 0x69, 0x61]),
-            495790221665usize
-        );
+    fn test_bytes_to_int() {
+        let number: usize = bytes_to_int(&[0x73, 0x6f, 0x66, 0x69, 0x61]);
+        assert_eq!(number, 495790221665usize);
     }
 
     #[test]
     fn test_usize_to_bytes() {
         assert_eq!(
-            usize_to_bytes(495790221665usize),
+            int_to_bytes(495790221665u64),
             [0x73, 0x6f, 0x66, 0x69, 0x61]
         );
     }
