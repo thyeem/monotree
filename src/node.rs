@@ -2,7 +2,6 @@ use crate::bits::Bits;
 use crate::consts::HASH_LEN;
 use crate::utils::*;
 use crate::Result;
-use serde::{Deserialize, Serialize};
 
 pub type Cell<'a> = Option<Unit<'a>>;
 
@@ -11,7 +10,7 @@ pub enum Node<'a> {
     Hard(Cell<'a>, Cell<'a>),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Unit<'a> {
     pub hash: &'a [u8],
     pub bits: Bits<'a>,
@@ -21,8 +20,9 @@ impl<'a> Node<'a> {
     pub fn new(lc: Cell<'a>, rc: Cell<'a>) -> Self {
         match (&lc, &rc) {
             (&Some(_), &None) => Node::Soft(lc),
+            (&None, &Some(_)) => Node::Soft(rc),
             (&Some(_), &Some(_)) => Node::Hard(lc, rc),
-            _ => unreachable!(),
+            _ => unreachable!("Node::new()"),
         }
     }
 
@@ -69,7 +69,7 @@ impl<'a> Node<'a> {
                 let (rc, _) = Node::parse_bytes(&bytes[size..bytes.len() - 1], true)?;
                 Ok(Node::Hard(lc, rc))
             }
-            _ => unreachable!(),
+            _ => unreachable!("Node::from_bytes()"),
         }
     }
 
@@ -89,7 +89,7 @@ impl<'a> Node<'a> {
                 ]
                 .concat())
             }
-            _ => unreachable!(),
+            _ => unreachable!("node.to_bytes()"),
         }
     }
 }

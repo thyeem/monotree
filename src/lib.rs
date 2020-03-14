@@ -34,8 +34,12 @@ impl Error for Errors {
 
 pub trait Database {
     fn new(dbpath: &str) -> Self;
-    fn get(&self, key: &[u8]) -> Result<Vec<u8>>;
+    fn close(&mut self) -> Result<()>;
+    fn get(&mut self, key: &[u8]) -> Result<Vec<u8>>;
     fn put(&mut self, key: &[u8], value: Vec<u8>) -> Result<()>;
+    fn remove(&mut self, key: &[u8]) -> Result<()>;
+    fn init_batch(&mut self) -> Result<()>;
+    fn write_batch(&mut self) -> Result<()>;
 }
 
 pub mod consts;
@@ -44,4 +48,5 @@ pub mod utils;
 pub mod bits;
 pub mod database;
 pub mod node;
+pub mod perf;
 pub mod tree;

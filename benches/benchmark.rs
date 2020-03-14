@@ -8,8 +8,6 @@ use monotree::tree::MonoTree;
 use monotree::utils::*;
 use monotree::Hash;
 use starling::hash_tree::HashTree;
-use starminer::database::MemoryDatabase;
-use starminer::dynamic_smt::SparseMerkletrie;
 
 const N: usize = 100;
 
@@ -32,12 +30,6 @@ fn bench_group(c: &mut Criterion) {
     let root: Option<Hash> = None;
     let merklebit = (&mut tree, root);
 
-    let mut tree = SparseMerkletrie::new(MemoryDatabase::default());
-    let startree = (&mut tree,);
-
-    group.bench_function("startree", |b| {
-        b.iter(|| bench_startree(black_box(startree.0), black_box(&pairs)))
-    });
     group.bench_function("merklebit", |b| {
         b.iter(|| {
             bench_merklebit(
@@ -65,13 +57,7 @@ fn bench_monotree(
     pairs: &Vec<(Hash, Hash)>,
 ) {
     pairs.iter().for_each(|(key, value)| {
-        root = tree.insert(root.as_ref(), key, value);
-    });
-}
-
-fn bench_startree(tree: &mut SparseMerkletrie<MemoryDatabase>, pairs: &Vec<(Hash, Hash)>) {
-    pairs.iter().for_each(|(key, value)| {
-        tree.put(key, value);
+        root = tree.insert(root.as_ref(), key, value).unwrap();
     });
 }
 

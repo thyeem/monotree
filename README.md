@@ -76,10 +76,8 @@ How to generate and manipulate a new MonoTree instance
     // suppose pairs of (key: Hash, value: Hash) were alreay inserted.
     // test all of those with the last root obtained.
     pairs.iter().for_each(|(key, value)| {
-        // gen merkle proof on the key
+        // gen/verify Merkle proof with each key
         let proof = tree.get_merkle_proof(root.as_ref(), key).unwrap();
-
-        // verify the proof
         assert_eq!(tree::verify_proof(root.as_ref(), value, &proof), true);
     });
 ```

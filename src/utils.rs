@@ -1,6 +1,5 @@
-extern crate hex;
 use crate::consts::HASH_LEN;
-use crate::{Hash, Result};
+use crate::Hash;
 use blake2_rfc::blake2b::{blake2b, Blake2bResult};
 use num::{NumCast, PrimInt};
 use std::cmp;
@@ -81,6 +80,10 @@ pub fn debug<T: std::fmt::Debug>(x: &T) {
     println!("{:?}", x);
 }
 
+pub fn cast<T: NumCast, U: NumCast>(n: T) -> U {
+    NumCast::from(n).expect("cast(): Numcast")
+}
+
 pub fn random_bytes(n: usize) -> Vec<u8> {
     (0..n).map(|_| rand::random::<u8>()).collect()
 }
@@ -89,9 +92,6 @@ pub fn hash_fn_factory(n: usize) -> impl Fn(&[u8]) -> Blake2bResult {
     move |x| blake2b(n, &[], x)
 }
 
-pub fn cast<T: NumCast, U: NumCast>(n: T) -> U {
-    NumCast::from(n).expect("casting PrimInt")
-}
 /// get length of the Longest Common Prefix bits for a set of two bytes
 pub fn len_lcp<T>(a: &[u8], m: &Range<T>, b: &[u8], n: &Range<T>) -> T
 where
@@ -180,10 +180,10 @@ pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
         .collect()
 }
 
-pub fn slice_to_hash(slice: &[u8]) -> Result<Hash> {
+pub fn slice_to_hash(slice: &[u8]) -> Option<Hash> {
     let mut hash = [0x00; HASH_LEN];
     hash.copy_from_slice(slice);
-    Ok(hash)
+    Some(hash)
 }
 
 #[cfg(test)]
