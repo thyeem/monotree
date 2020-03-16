@@ -5,7 +5,7 @@ use crate::utils::*;
 use crate::{Database, Hash, Proof, Result};
 use blake2_rfc::blake2b::blake2b;
 
-/// Example: How to use MonoTree
+/// Example: How to use monotree
 /// ```rust, ignore
 ///     //--- prepare random key-value pair like:
 ///     type Hash = [u8; HASH_LEN]
@@ -14,9 +14,9 @@ use blake2_rfc::blake2b::blake2b;
 ///         .collect();
 ///
 ///     //--- init tree using either In-Memory HashMap
-///     let mut tree = tree::MonoTree::<MemoryDB>::new("MemDB");
+///     let mut tree = tree::Monotree::<MemoryDB>::new("MemDB");
 ///     //--- or RocksDB
-///     let mut tree = tree::MonoTree::<RocksdbDB>::new("RocksDB");
+///     let mut tree = tree::Monotree::<RocksdbDB>::new("RocksDB");
 ///     let mut root = tree.new_tree();
 ///
 ///    //--- functional test: insert/get
@@ -49,17 +49,14 @@ use blake2_rfc::blake2b::blake2b;
 /// ```
 
 #[derive(Clone, Debug)]
-pub struct MonoTree<D: Database> {
+pub struct Monotree<D: Database> {
     db: D,
 }
 
-impl<D> MonoTree<D>
-where
-    D: Database,
-{
+impl<D: Database> Monotree<D> {
     pub fn new(dbpath: &str) -> Self {
         let db = Database::new(dbpath);
-        MonoTree { db }
+        Monotree { db }
     }
 
     pub fn close(&mut self) -> Result<()> {
@@ -166,13 +163,10 @@ where
         let unit = lc.as_ref().expect("delete_key(): left-unit");
         let n = Bits::len_common_bits(&unit.bits, &bits);
         match n {
-            n if n == bits.len() => {
-                self.db.remove(&unit.hash)?;
-                match rc {
-                    Some(_) => self.put_node(Node::new(None, rc)),
-                    None => Ok(None),
-                }
-            }
+            n if n == bits.len() => match rc {
+                Some(_) => self.put_node(Node::new(None, rc)),
+                None => Ok(None),
+            },
             n if n == unit.bits.len() => {
                 let hash = self.delete_key(&unit.hash, bits.shift(n, false))?;
                 match (hash, &rc) {
@@ -258,7 +252,7 @@ where
     }
 }
 
-/// No need to be a member of MonoTree.
+/// No need to be a member of Monotree.
 /// This verification must be called independantly upon request.
 pub fn verify_proof(root: Option<&Hash>, leaf: &Hash, proof: &[(bool, Vec<u8>)]) -> bool {
     let mut hash = leaf.to_vec();

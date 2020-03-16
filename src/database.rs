@@ -20,7 +20,6 @@ impl Database for MemoryDB {
     }
 
     fn close(&mut self) -> Result<()> {
-        self.db.clear();
         Ok(())
     }
 
