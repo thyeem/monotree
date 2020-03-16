@@ -23,8 +23,9 @@ use blake2_rfc::blake2b::blake2b;
 ///    pairs.iter().enumerate().for_each(|(i, (key, value))| {
 ///        // insert a key
 ///        root = tree.insert(root.as_ref(), key, value).unwrap();
+
+///        // check if the key-value pair was correctly inserted so far
 ///        pairs.iter().take(i + 1).for_each(|(k, v)| {
-///            // check if the key-value pair was correctly inserted so far
 ///            assert_eq!(tree.get(root.as_ref(), k).unwrap(), Some(*v));
 ///        });
 ///    });
@@ -33,19 +34,18 @@ use blake2_rfc::blake2b::blake2b;
 ///    //--- functional test: remove
 ///    pairs.iter().enumerate().for_each(|(i, (key, _))| {
 ///        assert_ne!(root, None);
+
 ///        // assert that all values are fine after deletion
 ///        pairs.iter().skip(i).for_each(|(k, v)| {
 ///            assert_eq!(tree.get(root.as_ref(), k).unwrap(), Some(*v));
-///            let proof = tree.get_merkle_proof(root.as_ref(), k).unwrap().unwrap();
-///            assert_eq!(tree::verify_proof(root.as_ref(), v, &proof), true);
 ///        });
+
 ///        // delete a key
 ///        root = tree.remove(root.as_ref(), key).unwrap();
 ///        assert_eq!(tree.get(root.as_ref(), key).unwrap(), None);
 ///    });
 ///    // back to inital state of tree
 ///    assert_eq!(root, None);
-///    });
 /// ```
 
 #[derive(Clone, Debug)]

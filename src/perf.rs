@@ -6,7 +6,7 @@ use crate::*;
 use starling::hash_tree::HashTree;
 use std::fs;
 
-const N: usize = 50000;
+const N: usize = 10000;
 
 // merklebit item will be eraseda when released
 pub fn perf() {
@@ -76,5 +76,9 @@ pub fn perf() {
     merklebit_hashmap();
     monotree_hashmap();
     monotree_rocksdb_batch();
+
+    monotree_rocksdb_batch();
+    monotree_hashmap();
+    merklebit_hashmap();
     monotree_rocksdb_no_batch();
 }

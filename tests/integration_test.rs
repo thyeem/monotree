@@ -19,7 +19,7 @@ fn gen_random_pairs(n: usize) -> Vec<(Hash, Hash)> {
 fn insert_keys_then_verify_values<D: Database>(
     mut tree: MonoTree<D>,
     mut root: Option<Hash>,
-    pairs: &Vec<(Hash, Hash)>,
+    pairs: &[(Hash, Hash)],
 ) -> (Option<Hash>, MonoTree<D>) {
     pairs.iter().enumerate().for_each(|(i, (key, value))| {
         // insert a key
@@ -36,7 +36,7 @@ fn insert_keys_then_verify_values<D: Database>(
 fn insert_keys_then_gen_and_verify_proof<D: Database>(
     mut tree: MonoTree<D>,
     mut root: Option<Hash>,
-    pairs: &Vec<(Hash, Hash)>,
+    pairs: &[(Hash, Hash)],
 ) -> (Option<Hash>, MonoTree<D>) {
     pairs.iter().enumerate().for_each(|(i, (key, value))| {
         // insert a key
@@ -54,7 +54,7 @@ fn insert_keys_then_gen_and_verify_proof<D: Database>(
 fn insert_keys_then_delete_keys_in_order<D: Database>(
     mut tree: MonoTree<D>,
     mut root: Option<Hash>,
-    pairs: &Vec<(Hash, Hash)>,
+    pairs: &[(Hash, Hash)],
 ) -> (Option<Hash>, MonoTree<D>) {
     pairs.iter().for_each(|(key, value)| {
         root = tree.insert(root.as_ref(), key, value).unwrap();
@@ -80,7 +80,7 @@ fn insert_keys_then_delete_keys_in_order<D: Database>(
 fn insert_keys_then_delete_keys_reversely<D: Database>(
     mut tree: MonoTree<D>,
     mut root: Option<Hash>,
-    pairs: &Vec<(Hash, Hash)>,
+    pairs: &[(Hash, Hash)],
 ) -> (Option<Hash>, MonoTree<D>) {
     pairs.iter().for_each(|(key, value)| {
         root = tree.insert(root.as_ref(), key, value).unwrap();
@@ -106,7 +106,7 @@ fn insert_keys_then_delete_keys_reversely<D: Database>(
 fn insert_keys_then_delete_keys_immediately<D: Database>(
     mut tree: MonoTree<D>,
     mut root: Option<Hash>,
-    pairs: &Vec<(Hash, Hash)>,
+    pairs: &[(Hash, Hash)],
 ) -> (Option<Hash>, MonoTree<D>) {
     pairs.iter().for_each(|(key, value)| {
         root = tree.insert(root.as_ref(), key, value).unwrap();

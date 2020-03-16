@@ -138,7 +138,7 @@ impl Database for RocksDB {
     fn write_batch(&mut self) -> Result<()> {
         self.use_batch = false;
         if !self.batch.is_empty() {
-            let batch = mem::replace(&mut self.batch, WriteBatch::default());
+            let batch = mem::take(&mut self.batch);
             let db = self.db.lock().expect("write_batch(): rocksdb");
             db.write(batch)?
         }

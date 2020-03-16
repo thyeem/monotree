@@ -3,11 +3,13 @@ extern crate criterion;
 use criterion::{black_box, Criterion};
 
 use monotree::consts::HASH_LEN;
-use monotree::database::MemoryDB;
+use monotree::database::{MemoryDB, RocksDB};
 use monotree::tree::MonoTree;
 use monotree::utils::*;
 use monotree::Hash;
+use monotree::*;
 use starling::hash_tree::HashTree;
+use std::fs;
 
 const N: usize = 100;
 
@@ -22,46 +24,64 @@ fn bench_group(c: &mut Criterion) {
     let mut group = c.benchmark_group("benchGroup");
     let pairs = prepare(N);
 
-    let mut tree = MonoTree::<MemoryDB>::new("memdb");
-    let root = tree.new_tree();
-    let monotree = (&mut tree, root);
-
-    let mut tree = HashTree::<Hash, Vec<u8>>::new(256).unwrap();
-    let root: Option<Hash> = None;
-    let merklebit = (&mut tree, root);
-
-    group.bench_function("merklebit", |b| {
-        b.iter(|| {
-            bench_merklebit(
-                black_box(merklebit.0),
-                black_box(merklebit.1),
-                black_box(&pairs),
-            )
-        })
+    group.bench_function("merklebit_hashmap", |b| {
+        let mut tree = HashTree::<Hash, Vec<u8>>::new(256).unwrap();
+        let root: Option<Hash> = None;
+        b.iter(|| bench_merklebit_hashmap(black_box(&mut tree), black_box(root), black_box(&pairs)))
     });
-    group.bench_function("monotree", |b| {
+
+    group.bench_function("monotree_hashmap", |b| {
+        let mut tree = MonoTree::<MemoryDB>::new("hashmap");
+        let root = tree.new_tree();
+        b.iter(|| bench_monotree_hashmap(black_box(&mut tree), black_box(root), black_box(&pairs)))
+    });
+
+    group.bench_function("monotree_rocksdb", |b| {
+        let dbname = hex!(random_bytes(4));
+        let _g = scopeguard::guard((), |_| {
+            if fs::metadata(&dbname).is_ok() {
+                fs::remove_dir_all(&dbname).unwrap()
+            }
+        });
+        let mut tree = MonoTree::<RocksDB>::new(&dbname);
+        let root = tree.new_tree();
+        let (keys, leaves): (Vec<Hash>, Vec<Hash>) = pairs.iter().cloned().unzip();
         b.iter(|| {
-            bench_monotree(
-                black_box(monotree.0),
-                black_box(monotree.1),
-                black_box(&pairs),
+            bench_monotree_rocksdb(
+                black_box(&mut tree),
+                black_box(root),
+                black_box(&keys),
+                black_box(&leaves),
             )
         })
     });
     group.finish();
 }
 
-fn bench_monotree(
+fn bench_monotree_hashmap(
     tree: &mut MonoTree<MemoryDB>,
     mut root: Option<Hash>,
-    pairs: &Vec<(Hash, Hash)>,
+    pairs: &[(Hash, Hash)],
 ) {
     pairs.iter().for_each(|(key, value)| {
         root = tree.insert(root.as_ref(), key, value).unwrap();
     });
 }
 
-fn bench_merklebit(tree: &mut HashTree<Hash>, mut root: Option<Hash>, pairs: &Vec<(Hash, Hash)>) {
+fn bench_monotree_rocksdb(
+    tree: &mut MonoTree<RocksDB>,
+    root: Option<Hash>,
+    keys: &[Hash],
+    leaves: &[Hash],
+) {
+    tree.inserts(root.as_ref(), &keys, &leaves).unwrap();
+}
+
+fn bench_merklebit_hashmap(
+    tree: &mut HashTree<Hash>,
+    mut root: Option<Hash>,
+    pairs: &[(Hash, Hash)],
+) {
     pairs.iter().for_each(|(key, value)| {
         root = Some(
             tree.insert(root.as_ref(), &mut [*key], &[value.to_vec()])
