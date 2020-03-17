@@ -1,6 +1,6 @@
 use monotree::consts::HASH_LEN;
 use monotree::database::{MemoryDB, RocksDB};
-use monotree::tree::MonoTree;
+use monotree::tree::Monotree;
 use monotree::utils::*;
 use monotree::*;
 use std::fs;
@@ -17,10 +17,10 @@ fn gen_random_pairs(n: usize) -> Vec<(Hash, Hash)> {
 }
 
 fn insert_keys_then_verify_values<D: Database>(
-    mut tree: MonoTree<D>,
+    mut tree: Monotree<D>,
     mut root: Option<Hash>,
     pairs: &[(Hash, Hash)],
-) -> (Option<Hash>, MonoTree<D>) {
+) -> (Option<Hash>, Monotree<D>) {
     pairs.iter().enumerate().for_each(|(i, (key, value))| {
         // insert a key
         root = tree.insert(root.as_ref(), key, value).unwrap();
@@ -34,10 +34,10 @@ fn insert_keys_then_verify_values<D: Database>(
 }
 
 fn insert_keys_then_gen_and_verify_proof<D: Database>(
-    mut tree: MonoTree<D>,
+    mut tree: Monotree<D>,
     mut root: Option<Hash>,
     pairs: &[(Hash, Hash)],
-) -> (Option<Hash>, MonoTree<D>) {
+) -> (Option<Hash>, Monotree<D>) {
     pairs.iter().enumerate().for_each(|(i, (key, value))| {
         // insert a key
         root = tree.insert(root.as_ref(), key, value).unwrap();
@@ -52,10 +52,10 @@ fn insert_keys_then_gen_and_verify_proof<D: Database>(
 }
 
 fn insert_keys_then_delete_keys_in_order<D: Database>(
-    mut tree: MonoTree<D>,
+    mut tree: Monotree<D>,
     mut root: Option<Hash>,
     pairs: &[(Hash, Hash)],
-) -> (Option<Hash>, MonoTree<D>) {
+) -> (Option<Hash>, Monotree<D>) {
     pairs.iter().for_each(|(key, value)| {
         root = tree.insert(root.as_ref(), key, value).unwrap();
     });
@@ -78,10 +78,10 @@ fn insert_keys_then_delete_keys_in_order<D: Database>(
 }
 
 fn insert_keys_then_delete_keys_reversely<D: Database>(
-    mut tree: MonoTree<D>,
+    mut tree: Monotree<D>,
     mut root: Option<Hash>,
     pairs: &[(Hash, Hash)],
-) -> (Option<Hash>, MonoTree<D>) {
+) -> (Option<Hash>, Monotree<D>) {
     pairs.iter().for_each(|(key, value)| {
         root = tree.insert(root.as_ref(), key, value).unwrap();
     });
@@ -104,10 +104,10 @@ fn insert_keys_then_delete_keys_reversely<D: Database>(
 }
 
 fn insert_keys_then_delete_keys_immediately<D: Database>(
-    mut tree: MonoTree<D>,
+    mut tree: Monotree<D>,
     mut root: Option<Hash>,
     pairs: &[(Hash, Hash)],
-) -> (Option<Hash>, MonoTree<D>) {
+) -> (Option<Hash>, Monotree<D>) {
     pairs.iter().for_each(|(key, value)| {
         root = tree.insert(root.as_ref(), key, value).unwrap();
         assert_eq!(tree.get(root.as_ref(), key).unwrap(), Some(*value));
@@ -130,7 +130,7 @@ macro_rules! impl_integration_test {
                     }
                 });
                 let pairs = gen_random_pairs($n);
-                let mut tree = MonoTree::<$DB>::new(&dbname);
+                let mut tree = Monotree::<$DB>::new(&dbname);
                 let root = tree.new_tree();
                 $fn(tree, root, &pairs);
             }
