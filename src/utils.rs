@@ -109,7 +109,7 @@ where
 pub fn bit<T: PrimInt + NumCast>(bytes: &[u8], i: T) -> bool {
     let q = i.to_usize().expect("bit(): usize") / 8;
     let r = i.to_u8().expect("bit(): u8") % 8;
-    (bytes[q as usize] >> (7 - r)) & 0x01 == 0x01
+    (bytes[q] >> (7 - r)) & 0x01 == 0x01
 }
 
 pub fn nbytes_across<T: PrimInt + NumCast>(start: T, end: T) -> T {

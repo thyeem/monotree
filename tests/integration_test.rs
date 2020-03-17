@@ -20,7 +20,7 @@ fn insert_keys_then_verify_values<D: Database>(
     mut tree: Monotree<D>,
     mut root: Option<Hash>,
     pairs: &[(Hash, Hash)],
-) -> (Option<Hash>, Monotree<D>) {
+) {
     pairs.iter().enumerate().for_each(|(i, (key, value))| {
         // insert a key
         root = tree.insert(root.as_ref(), key, value).unwrap();
@@ -30,14 +30,13 @@ fn insert_keys_then_verify_values<D: Database>(
         });
     });
     assert_ne!(root, None);
-    (root, tree)
 }
 
 fn insert_keys_then_gen_and_verify_proof<D: Database>(
     mut tree: Monotree<D>,
     mut root: Option<Hash>,
     pairs: &[(Hash, Hash)],
-) -> (Option<Hash>, Monotree<D>) {
+) {
     pairs.iter().enumerate().for_each(|(i, (key, value))| {
         // insert a key
         root = tree.insert(root.as_ref(), key, value).unwrap();
@@ -48,14 +47,13 @@ fn insert_keys_then_gen_and_verify_proof<D: Database>(
         });
     });
     assert_ne!(root, None);
-    (root, tree)
 }
 
 fn insert_keys_then_delete_keys_in_order<D: Database>(
     mut tree: Monotree<D>,
     mut root: Option<Hash>,
     pairs: &[(Hash, Hash)],
-) -> (Option<Hash>, Monotree<D>) {
+) {
     pairs.iter().for_each(|(key, value)| {
         root = tree.insert(root.as_ref(), key, value).unwrap();
     });
@@ -74,14 +72,13 @@ fn insert_keys_then_delete_keys_in_order<D: Database>(
     });
     // back to inital state of tree
     assert_eq!(root, None);
-    (root, tree)
 }
 
 fn insert_keys_then_delete_keys_reversely<D: Database>(
     mut tree: Monotree<D>,
     mut root: Option<Hash>,
     pairs: &[(Hash, Hash)],
-) -> (Option<Hash>, Monotree<D>) {
+) {
     pairs.iter().for_each(|(key, value)| {
         root = tree.insert(root.as_ref(), key, value).unwrap();
     });
@@ -100,14 +97,13 @@ fn insert_keys_then_delete_keys_reversely<D: Database>(
     });
     // back to inital state of tree
     assert_eq!(root, None);
-    (root, tree)
 }
 
 fn insert_keys_then_delete_keys_immediately<D: Database>(
     mut tree: Monotree<D>,
     mut root: Option<Hash>,
     pairs: &[(Hash, Hash)],
-) -> (Option<Hash>, Monotree<D>) {
+) {
     pairs.iter().for_each(|(key, value)| {
         root = tree.insert(root.as_ref(), key, value).unwrap();
         assert_eq!(tree.get(root.as_ref(), key).unwrap(), Some(*value));
@@ -115,7 +111,6 @@ fn insert_keys_then_delete_keys_immediately<D: Database>(
         assert_eq!(tree.get(root.as_ref(), key).unwrap(), None);
         assert_eq!(root, None);
     });
-    (root, tree)
 }
 
 macro_rules! impl_integration_test {
