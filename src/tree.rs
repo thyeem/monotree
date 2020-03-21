@@ -6,46 +6,57 @@ use crate::{Database, Hash, Proof, Result};
 use blake2_rfc::blake2b::blake2b;
 
 /// Example: How to use monotree
-/// ```rust, ignore
-///     //--- prepare random key-value pair like:
-///     type Hash = [u8; HASH_LEN]
-///     let pairs: Vec<(Hash, Hash)> = (0..1000)
+/// ```rust
+///     use monotree::consts::HASH_LEN;
+///     use monotree::database::{MemoryDB, RocksDB};
+///     use monotree::tree::Monotree;
+///     use monotree::utils::*;
+///     use monotree::*;
+///
+///     /// gen random 100 key-value pair
+///     let pairs: Vec<(Hash, Hash)> = (0..100)
 ///         .map(|_| (random_bytes(HASH_LEN), random_bytes(HASH_LEN)))
+///         .map(|x| (slice_to_hash(&x.0).unwrap(), slice_to_hash(&x.1).unwrap()))
 ///         .collect();
 ///
-///     //--- init tree using either In-Memory HashMap
-///     let mut tree = tree::Monotree::<MemoryDB>::new("MemDB");
-///     //--- or RocksDB
-///     let mut tree = tree::Monotree::<RocksdbDB>::new("RocksDB");
+///     // init tree using either In-Memory HashMap
+///     let mut tree = tree::Monotree::<MemoryDB>::new("hashmap");
+///     // or RocksDB. Use only one of them at a time
+///     // let mut tree = tree::Monotree::<RocksDB>::new(DB_PATH);
 ///     let mut root = tree.new_tree();
+///     
+///     // insert keys example with some assertions
+///     pairs.iter().enumerate().for_each(|(i, (key, value))| {
+///         // insert a key
+///         root = tree.insert(root.as_ref(), key, value).unwrap();
+
+///         //--- functional test: insert/get
+///         pairs.iter().take(i + 1).for_each(|(k, v)| {
+///             // check if the key-value pair was correctly inserted so far
+///             assert_eq!(tree.get(root.as_ref(), k).unwrap(), Some(*v));
+///         });
+///     });
+///     assert_ne!(root, None);
 ///
-///    //--- functional test: insert/get
-///    pairs.iter().enumerate().for_each(|(i, (key, value))| {
-///        // insert a key
-///        root = tree.insert(root.as_ref(), key, value).unwrap();
-
-///        // check if the key-value pair was correctly inserted so far
-///        pairs.iter().take(i + 1).for_each(|(k, v)| {
-///            assert_eq!(tree.get(root.as_ref(), k).unwrap(), Some(*v));
-///        });
-///    });
-///    assert_ne!(root, None);
+///     // delete keys example with some assertions
+///     pairs.iter().enumerate().for_each(|(i, (key, _))| {
 ///
-///    //--- functional test: remove
-///    pairs.iter().enumerate().for_each(|(i, (key, _))| {
-///        assert_ne!(root, None);
-
-///        // assert that all values are fine after deletion
-///        pairs.iter().skip(i).for_each(|(k, v)| {
-///            assert_eq!(tree.get(root.as_ref(), k).unwrap(), Some(*v));
-///        });
-
-///        // delete a key
-///        root = tree.remove(root.as_ref(), key).unwrap();
-///        assert_eq!(tree.get(root.as_ref(), key).unwrap(), None);
-///    });
-///    // back to inital state of tree
-///    assert_eq!(root, None);
+///         //--- functional test: remove
+///         // assert that all values are fine after deletion
+///         assert_ne!(root, None);
+///         pairs.iter().skip(i).for_each(|(k, v)| {
+///             assert_eq!(tree.get(root.as_ref(), k).unwrap(), Some(*v));
+///         });
+///
+///         // delete a key
+///         root = tree.remove(root.as_ref(), key).unwrap();
+///
+///         // check if the key was correctly deleted
+///         assert_eq!(tree.get(root.as_ref(), key).unwrap(), None);
+///     });
+///
+///     // back to inital state of tree
+///     assert_eq!(root, None);
 /// ```
 
 #[derive(Clone, Debug)]

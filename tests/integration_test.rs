@@ -167,5 +167,5 @@ impl_test_with_all_params!(
         insert_keys_then_delete_keys_reversely
     ],
     [("hashmap", MemoryDB), ("rocksdb", RocksDB)],
-    [100, 500, 1000, 5000]
+    [10, 50, 100, 500]
 );
