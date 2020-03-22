@@ -2,6 +2,7 @@ use crate::consts::HASH_LEN;
 use crate::Hash;
 use blake2_rfc::blake2b::{blake2b, Blake2bResult};
 use num::{NumCast, PrimInt};
+use rand::Rng;
 use std::cmp;
 use std::ops::Range;
 
@@ -84,12 +85,35 @@ pub fn cast<T: NumCast, U: NumCast>(n: T) -> U {
     NumCast::from(n).expect("cast(): Numcast")
 }
 
+pub fn hash_fn_factory(n: usize) -> impl Fn(&[u8]) -> Blake2bResult {
+    move |x| blake2b(n, &[], x)
+}
+
 pub fn random_bytes(n: usize) -> Vec<u8> {
     (0..n).map(|_| rand::random::<u8>()).collect()
 }
 
-pub fn hash_fn_factory(n: usize) -> impl Fn(&[u8]) -> Blake2bResult {
-    move |x| blake2b(n, &[], x)
+pub fn random_hashes(n: usize) -> Vec<Hash> {
+    (0..n)
+        .map(|_| random_bytes(HASH_LEN))
+        .map(|x| slice_to_hash(&x).unwrap())
+        .collect()
+}
+
+pub fn slice_to_hash(slice: &[u8]) -> Option<Hash> {
+    let mut hash = [0x00; HASH_LEN];
+    hash.copy_from_slice(slice);
+    Some(hash)
+}
+
+// Fisher-Yates shuffle
+pub fn shuffle<T: Clone>(v: &mut Vec<T>) {
+    let mut rng = rand::thread_rng();
+    let s = v.len();
+    (1..s).for_each(|i| {
+        let q = rng.gen_range(0, s - i);
+        v.swap(i, q);
+    });
 }
 
 /// get length of the Longest Common Prefix bits for a set of two bytes
@@ -178,12 +202,6 @@ pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
         .rev()
         .map(|v| bits_to_usize(v) as u8)
         .collect()
-}
-
-pub fn slice_to_hash(slice: &[u8]) -> Option<Hash> {
-    let mut hash = [0x00; HASH_LEN];
-    hash.copy_from_slice(slice);
-    Some(hash)
 }
 
 #[cfg(test)]

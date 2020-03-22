@@ -13,25 +13,23 @@ use blake2_rfc::blake2b::blake2b;
 ///     use monotree::utils::*;
 ///     use monotree::*;
 ///
-///     /// gen random 100 key-value pair
-///     let pairs: Vec<(Hash, Hash)> = (0..100)
-///         .map(|_| (random_bytes(HASH_LEN), random_bytes(HASH_LEN)))
-///         .map(|x| (slice_to_hash(&x.0).unwrap(), slice_to_hash(&x.1).unwrap()))
-///         .collect();
+///     // prepare some random hashes for keys and leaves
+///     let keys = random_hashes(100);
+///     let leaves = random_hashes(100);
 ///
 ///     // init tree using either In-Memory HashMap
-///     let mut tree = tree::Monotree::<MemoryDB>::new("hashmap");
+///     let mut tree = Monotree::<MemoryDB>::new("hashmap");
 ///     // or RocksDB. Use only one of them at a time
-///     // let mut tree = tree::Monotree::<RocksDB>::new(DB_PATH);
+///     // let mut tree = Monotree::<RocksDB>::new(DB_PATH);
 ///     let mut root = tree.new_tree();
 ///     
 ///     // insert keys example with some assertions
-///     pairs.iter().enumerate().for_each(|(i, (key, value))| {
+///     keys.iter().zip(leaves.iter()).enumerate().for_each(|(i, (key, value))| {
 ///         // insert a key
 ///         root = tree.insert(root.as_ref(), key, value).unwrap();
-
+///
 ///         //--- functional test: insert/get
-///         pairs.iter().take(i + 1).for_each(|(k, v)| {
+///         keys.iter().zip(leaves.iter()).take(i + 1).for_each(|(k, v)| {
 ///             // check if the key-value pair was correctly inserted so far
 ///             assert_eq!(tree.get(root.as_ref(), k).unwrap(), Some(*v));
 ///         });
@@ -39,12 +37,12 @@ use blake2_rfc::blake2b::blake2b;
 ///     assert_ne!(root, None);
 ///
 ///     // delete keys example with some assertions
-///     pairs.iter().enumerate().for_each(|(i, (key, _))| {
+///     keys.iter().zip(leaves.iter()).enumerate().for_each(|(i, (key, _))| {
 ///
 ///         //--- functional test: remove
 ///         // assert that all values are fine after deletion
 ///         assert_ne!(root, None);
-///         pairs.iter().skip(i).for_each(|(k, v)| {
+///         keys.iter().zip(leaves.iter()).skip(i).for_each(|(k, v)| {
 ///             assert_eq!(tree.get(root.as_ref(), k).unwrap(), Some(*v));
 ///         });
 ///
@@ -58,7 +56,6 @@ use blake2_rfc::blake2b::blake2b;
 ///     // back to inital state of tree
 ///     assert_eq!(root, None);
 /// ```
-
 #[derive(Clone, Debug)]
 pub struct Monotree<D: Database> {
     db: D,
@@ -196,30 +193,38 @@ impl<D: Database> Monotree<D> {
 
     /// Merkle proof secion: verifying inclusion of data -----------------------
     /// In order to prove proofs, use verify_proof() at the end of file below.
-    /// Example:
-    /// ```rust, ignore
-    ///     // suppose (key: Hash, value: Hash) alreay prepared.
-    ///     // let mut root = ...
-    ///     root = tree.insert(&root, &key, &value);
-    ///     ...
-    ///     let leaf = tree.get(root.as_ref(), &key).unwrap();
-    ///     let proof = tree.get_merkle_proof(root.as_ref(), &key)?.unwrap();
-    ///     assert_eq!(tree::verify_proof(root.as_ref(), &leaf, &proof), true);
-    /// ```
+    /// Outline:
+    ///     // generate a proof simply,
+    ///     // let proof = tree.get_merkle_proof(ROOT_REF, KEY_REF)?.unwrap();
     ///
-    /// Test operation guaranteed:
-    /// ```rust, ignore
-    ///    pairs.iter().enumerate().for_each(|(i, (key, value))| {
-    ///        // insert a key
+    ///     // verify proof: returns true or false as the result
+    ///     // tree::verify_proof(ROOT_REF, VALUE, PROOF_REF)
+    ///
+    /// Example:
+    /// ```rust
+    ///     use monotree::tree;
+    ///     use monotree::database::MemoryDB;
+    ///     use monotree::utils::*;
+
+    ///     // prepare some random hashes for keys and leaves
+    ///     let keys = random_hashes(100);
+    ///     let leaves = random_hashes(100);
+    ///     // init a Monotree
+    ///     let mut tree = tree::Monotree::<MemoryDB>::new("hashmap");
+    ///     let mut root = tree.new_tree();
+    ///
+    ///    // INTEGRITY: cumalative funtional test
+    ///    keys.iter().zip(leaves.iter()).enumerate().for_each(|(i, (key, value))| {
+    ///        // insert each key and update root
     ///        root = tree.insert(root.as_ref(), key, value).unwrap();
-    ///        pairs.iter().take(i + 1).for_each(|(k, v)| {
+    ///
+    ///        // where generate/verify Merkle proofs with all keys inserted so far
+    ///        keys.iter().zip(leaves.iter()).take(i + 1).for_each(|(k, v)| {
     ///            let proof = tree.get_merkle_proof(root.as_ref(), k).unwrap().unwrap();
-    ///            // gen/verify Merkle proof with all keys so far
     ///            assert_eq!(tree::verify_proof(root.as_ref(), v, &proof), true);
     ///        });
     ///    });
     /// ```
-
     pub fn get_merkle_proof(&mut self, root: Option<&Hash>, key: &[u8]) -> Result<Option<Proof>> {
         let mut proof: Proof = Vec::new();
         match root {

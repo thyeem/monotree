@@ -68,48 +68,46 @@ How to generate and manipulate a new `monotree` instance
     use monotree::*;
 
     fn main() {
-        /// gen random 10000 key-value pair
-        let pairs: Vec<(Hash, Hash)> = (0..10000)
-            .map(|_| (random_bytes(HASH_LEN), random_bytes(HASH_LEN)))
-            .map(|x| (slice_to_hash(&x.0).unwrap(), slice_to_hash(&x.1).unwrap()))
-            .collect();
+        // prepare some random hashes for keys and leaves
+        let keys = random_hashes(100);
+        let leaves = random_hashes(100);
 
         // init tree using either In-Memory HashMap
-        let mut tree = tree::Monotree::<MemoryDB>::new(DB_NAME);
+        let mut tree = tree::Monotree::<MemoryDB>::new("");
         // or RocksDB. Use only one of them at a time
         let mut tree = tree::Monotree::<RocksDB>::new(DB_PATH);
         let mut root = tree.new_tree();
         
         // insert keys example with some assertions
-        pairs.iter().enumerate().for_each(|(i, (key, value))| {
+        keys.iter().zip(leaves.iter()).enumerate().for_each(|(i, (key, value))| {
             // insert a key
             root = tree.insert(root.as_ref(), key, value).unwrap();
-
+        
             //--- functional test: insert/get
-            pairs.iter().take(i + 1).for_each(|(k, v)| {
+            keys.iter().zip(leaves.iter()).take(i + 1).for_each(|(k, v)| {
                 // check if the key-value pair was correctly inserted so far
                 assert_eq!(tree.get(root.as_ref(), k).unwrap(), Some(*v));
             });
         });
         assert_ne!(root, None);
-
+        
         // delete keys example with some assertions
-        pairs.iter().enumerate().for_each(|(i, (key, _))| {
-
+        keys.iter().zip(leaves.iter()).enumerate().for_each(|(i, (key, _))| {
+        
             //--- functional test: remove
             // assert that all values are fine after deletion
             assert_ne!(root, None);
-            pairs.iter().skip(i).for_each(|(k, v)| {
+            keys.iter().zip(leaves.iter()).skip(i).for_each(|(k, v)| {
                 assert_eq!(tree.get(root.as_ref(), k).unwrap(), Some(*v));
             });
-
+        
             // delete a key
             root = tree.remove(root.as_ref(), key).unwrap();
-
+        
             // check if the key was correctly deleted
             assert_eq!(tree.get(root.as_ref(), key).unwrap(), None);
         });
-
+        
         // back to inital state of tree
         assert_eq!(root, None);
     }
@@ -126,31 +124,28 @@ How to generate and manipulate a new `monotree` instance
 ```
 ### Example
 ```rust
-    // suppose (key: Hash, value: Hash) alreay prepared.
-    // let mut root = ...
-    root = tree.insert(&root, &key, &value);
-    ...
+    use monotree::tree;
+    use monotree::database::MemoryDB;
+    use monotree::utils::*;
 
-    // get a leaf related to the key interested
-    let leaf = tree.get(root.as_ref(), &key).unwrap();
+    // prepare some random hashes for keys and leaves
+    let keys = random_hashes(100);
+    let leaves = random_hashes(100);
+    // init a Monotree
+    let mut tree = tree::Monotree::<MemoryDB>::new("");
+    let mut root = tree.new_tree();
 
-    // generate a proof related to the key interested
-    let proof = tree.get_merkle_proof(root.as_ref(), &key)?.unwrap();
+   // INTEGRITY: cumalative funtional test
+   keys.iter().zip(leaves.iter()).enumerate().for_each(|(i, (key, value))| {
+       // insert each key and update root
+       root = tree.insert(root.as_ref(), key, value).unwrap();
 
-    // check if the proof is correct or not
-    assert_eq!(tree::verify_proof(root.as_ref(), &leaf, &proof), true);
-
-    // integrity: cumalative funtional test
-    pairs.iter().enumerate().for_each(|(i, (key, value))| {
-        // insert a key
-        root = tree.insert(root.as_ref(), key, value).unwrap();
-
-        // genenrate and verify Merkle proof with all keys so far
-        pairs.iter().take(i + 1).for_each(|(k, v)| {
-            let proof = tree.get_merkle_proof(root.as_ref(), k).unwrap().unwrap();
-            assert_eq!(tree::verify_proof(root.as_ref(), v, &proof), true);
-        });
-    });
+       // where generate/verify Merkle proofs with all keys inserted so far
+       keys.iter().zip(leaves.iter()).take(i + 1).for_each(|(k, v)| {
+           let proof = tree.get_merkle_proof(root.as_ref(), k).unwrap().unwrap();
+           assert_eq!(tree::verify_proof(root.as_ref(), v, &proof), true);
+       });
+   });
 ```
 
 ## Further improvements

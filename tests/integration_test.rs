@@ -99,6 +99,45 @@ fn insert_keys_then_delete_keys_reversely<D: Database>(
     assert_eq!(root, None);
 }
 
+fn insert_keys_then_delete_keys_randomly<D: Database>(
+    mut tree: Monotree<D>,
+    mut root: Option<Hash>,
+    pairs: &[(Hash, Hash)],
+) {
+    pairs.iter().for_each(|(key, value)| {
+        root = tree.insert(root.as_ref(), key, value).unwrap();
+    });
+
+    // shuffles pairs' index for imitating random-access
+    let mut idx: Vec<usize> = (0..pairs.len()).collect();
+    shuffle(&mut idx);
+
+    //test with shuffled keys
+    idx.iter().enumerate().for_each(|(n, i)| {
+        assert_ne!(root, None);
+        // assert that all values are fine after deletion
+        idx.iter().skip(n).for_each(|j| {
+            assert_eq!(
+                tree.get(root.as_ref(), &pairs[*j].0).unwrap(),
+                Some(pairs[*j].1)
+            );
+            let proof = tree
+                .get_merkle_proof(root.as_ref(), &pairs[*j].0)
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                tree::verify_proof(root.as_ref(), &pairs[*j].1, &proof),
+                true
+            );
+        });
+        // delete a key by random index
+        root = tree.remove(root.as_ref(), &pairs[*i].0).unwrap();
+        assert_eq!(tree.get(root.as_ref(), &pairs[*i].1).unwrap(), None);
+    });
+    // back to inital state of tree
+    assert_eq!(root, None);
+}
+
 fn insert_keys_then_delete_keys_immediately<D: Database>(
     mut tree: Monotree<D>,
     mut root: Option<Hash>,
@@ -164,8 +203,9 @@ impl_test_with_all_params!(
         insert_keys_then_gen_and_verify_proof,
         insert_keys_then_delete_keys_immediately,
         insert_keys_then_delete_keys_in_order,
-        insert_keys_then_delete_keys_reversely
+        insert_keys_then_delete_keys_reversely,
+        insert_keys_then_delete_keys_randomly
     ],
     [("hashmap", MemoryDB), ("rocksdb", RocksDB)],
-    [10, 50, 100, 500]
+    [100, 500, 1000]
 );
