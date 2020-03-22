@@ -158,6 +158,16 @@ impl<D: Database> Monotree<D> {
         }
     }
 
+    pub fn removes(&mut self, root: Option<&Hash>, keys: &[Hash]) -> Result<Option<Hash>> {
+        let mut root = root.cloned();
+        self.db.init_batch()?;
+        for key in keys.iter() {
+            root = self.remove(root.as_ref(), key)?;
+        }
+        self.db.write_batch()?;
+        Ok(root)
+    }
+
     pub fn remove(&mut self, root: Option<&Hash>, key: &[u8]) -> Result<Option<Hash>> {
         match root {
             None => Ok(None),
