@@ -1,5 +1,5 @@
-use monotree::consts::HASH_LEN;
 use monotree::database::{MemoryDB, RocksDB};
+use monotree::hasher::{Blake2b, Blake3, Sha3};
 use monotree::tree::Monotree;
 use monotree::utils::*;
 use monotree::*;
@@ -16,8 +16,9 @@ fn gen_random_pairs(n: usize) -> Vec<(Hash, Hash)> {
         .collect()
 }
 
-fn insert_keys_then_verify_values<D: Database>(
-    mut tree: Monotree<D>,
+fn insert_keys_then_verify_values<D: Database, H: Hasher>(
+    mut tree: Monotree<D, H>,
+    _hasher: &H,
     mut root: Option<Hash>,
     pairs: &[(Hash, Hash)],
 ) {
@@ -32,8 +33,9 @@ fn insert_keys_then_verify_values<D: Database>(
     assert_ne!(root, None);
 }
 
-fn insert_keys_then_gen_and_verify_proof<D: Database>(
-    mut tree: Monotree<D>,
+fn insert_keys_then_gen_and_verify_proof<D: Database, H: Hasher>(
+    mut tree: Monotree<D, H>,
+    hasher: &H,
     mut root: Option<Hash>,
     pairs: &[(Hash, Hash)],
 ) {
@@ -43,14 +45,15 @@ fn insert_keys_then_gen_and_verify_proof<D: Database>(
         pairs.iter().take(i + 1).for_each(|(k, v)| {
             // gen/verify Merkle proof with all keys so far
             let proof = tree.get_merkle_proof(root.as_ref(), k).unwrap().unwrap();
-            assert_eq!(tree::verify_proof(root.as_ref(), v, &proof), true);
+            assert_eq!(tree::verify_proof(hasher, root.as_ref(), v, &proof), true);
         });
     });
     assert_ne!(root, None);
 }
 
-fn insert_keys_then_delete_keys_in_order<D: Database>(
-    mut tree: Monotree<D>,
+fn insert_keys_then_delete_keys_in_order<D: Database, H: Hasher>(
+    mut tree: Monotree<D, H>,
+    hasher: &H,
     mut root: Option<Hash>,
     pairs: &[(Hash, Hash)],
 ) {
@@ -64,7 +67,7 @@ fn insert_keys_then_delete_keys_in_order<D: Database>(
         pairs.iter().skip(i).for_each(|(k, v)| {
             assert_eq!(tree.get(root.as_ref(), k).unwrap(), Some(*v));
             let proof = tree.get_merkle_proof(root.as_ref(), k).unwrap().unwrap();
-            assert_eq!(tree::verify_proof(root.as_ref(), v, &proof), true);
+            assert_eq!(tree::verify_proof(hasher, root.as_ref(), v, &proof), true);
         });
         // delete a key
         root = tree.remove(root.as_ref(), key).unwrap();
@@ -74,8 +77,9 @@ fn insert_keys_then_delete_keys_in_order<D: Database>(
     assert_eq!(root, None);
 }
 
-fn insert_keys_then_delete_keys_reversely<D: Database>(
-    mut tree: Monotree<D>,
+fn insert_keys_then_delete_keys_reversely<D: Database, H: Hasher>(
+    mut tree: Monotree<D, H>,
+    hasher: &H,
     mut root: Option<Hash>,
     pairs: &[(Hash, Hash)],
 ) {
@@ -89,7 +93,7 @@ fn insert_keys_then_delete_keys_reversely<D: Database>(
         pairs.iter().rev().skip(i).for_each(|(k, v)| {
             assert_eq!(tree.get(root.as_ref(), k).unwrap(), Some(*v));
             let proof = tree.get_merkle_proof(root.as_ref(), k).unwrap().unwrap();
-            assert_eq!(tree::verify_proof(root.as_ref(), v, &proof), true);
+            assert_eq!(tree::verify_proof(hasher, root.as_ref(), v, &proof), true);
         });
         // delete a key
         root = tree.remove(root.as_ref(), key).unwrap();
@@ -99,8 +103,9 @@ fn insert_keys_then_delete_keys_reversely<D: Database>(
     assert_eq!(root, None);
 }
 
-fn insert_keys_then_delete_keys_randomly<D: Database>(
-    mut tree: Monotree<D>,
+fn insert_keys_then_delete_keys_randomly<D: Database, H: Hasher>(
+    mut tree: Monotree<D, H>,
+    hasher: &H,
     mut root: Option<Hash>,
     pairs: &[(Hash, Hash)],
 ) {
@@ -126,7 +131,7 @@ fn insert_keys_then_delete_keys_randomly<D: Database>(
                 .unwrap()
                 .unwrap();
             assert_eq!(
-                tree::verify_proof(root.as_ref(), &pairs[*j].1, &proof),
+                tree::verify_proof(hasher, root.as_ref(), &pairs[*j].1, &proof),
                 true
             );
         });
@@ -138,8 +143,9 @@ fn insert_keys_then_delete_keys_randomly<D: Database>(
     assert_eq!(root, None);
 }
 
-fn insert_keys_then_delete_keys_immediately<D: Database>(
-    mut tree: Monotree<D>,
+fn insert_keys_then_delete_keys_immediately<D: Database, H: Hasher>(
+    mut tree: Monotree<D, H>,
+    _hasher: &H,
     mut root: Option<Hash>,
     pairs: &[(Hash, Hash)],
 ) {
@@ -153,10 +159,10 @@ fn insert_keys_then_delete_keys_immediately<D: Database>(
 }
 
 macro_rules! impl_integration_test {
-    ($fn: ident, $db: expr, $DB:ident, $n:expr) => {
+    ($fn: ident, $d: expr, $D:ident, $h: expr, $H: ident, $n:expr) => {
         item_with_macros! {
             #[test]
-            fn [<test_ $db _ $fn _ $n>]() {
+            fn [<test_ $d _ $h _ $fn _ $n>]() {
                 let dbname = hex!(random_bytes(4));
                 let _g = scopeguard::guard((), |_| {
                     if fs::metadata(&dbname).is_ok() {
@@ -164,34 +170,38 @@ macro_rules! impl_integration_test {
                     }
                 });
                 let pairs = gen_random_pairs($n);
-                let mut tree = Monotree::<$DB>::new(&dbname);
+                let mut tree = Monotree::<$D, $H>::new(&dbname);
+                let hasher = $H::new();
                 let root = tree.new_tree();
-                $fn(tree, root, &pairs);
+                $fn(tree, &hasher, root, &pairs);
             }
         }
     };
 }
 
 macro_rules! impl_test_with_all_params {
-    ([$($fn: tt),*], [$(($db: tt, $DB: tt)),*], [$n: expr, $($n_: tt),*]) => {
-        impl_test_with_all_params!([$($fn),*], [$(($db, $DB)),*], [$n]);
-        impl_test_with_all_params!([$($fn),*], [$(($db, $DB)),*], [$($n_),*]);
+    ([$($fn: tt),*], [$(($d: tt, $D: tt)),*], [$(($h: tt, $H: tt)),*], [$n: expr, $($n_: tt),*]) => {
+        impl_test_with_all_params!([$($fn),*], [$(($d, $D)),*], [$(($h, $H)),*], [$n]);
+        impl_test_with_all_params!([$($fn),*], [$(($d, $D)),*], [$(($h, $H)),*], [$($n_),*]);
     };
 
-
-    ([$($fn: tt),*], [($db: expr, $DB: ident), $(($db_: tt, $DB_: tt)),*], [$n: expr]) => {
-        impl_test_with_all_params!([$($fn),*], [($db, $DB)], [$n]);
-        impl_test_with_all_params!([$($fn),*], [$(($db_, $DB_)),*], [$n]);
+    ([$($fn: tt),*], [$(($d: tt, $D: tt)),*], [($h: expr, $H: ident), $(($h_: tt, $H_: tt)),*], [$n: expr]) => {
+        impl_test_with_all_params!([$($fn),*], [$(($d, $D)),*], [($h, $H)], [$n]);
+        impl_test_with_all_params!([$($fn),*], [$(($d, $D)),*], [$(($h_, $H_)),*], [$n]);
     };
 
-
-    ([$fn: ident, $($fn_: tt),*], [($db: expr, $DB: ident)], [$n: expr]) => {
-        impl_integration_test!($fn, $db, $DB, $n);
-        impl_test_with_all_params!([$($fn_),*], [($db, $DB)], [$n]);
+    ([$($fn: tt),*], [($d: expr, $D: ident), $(($d_: tt, $D_: tt)),*], [($h: expr, $H: ident)], [$n: expr]) => {
+        impl_test_with_all_params!([$($fn),*], [($d, $D)], [($h, $H)], [$n]);
+        impl_test_with_all_params!([$($fn),*], [$(($d_, $D_)),*], [($h, $H)], [$n]);
     };
 
-    ([$fn: ident], [($db: expr, $DB: ident)], [$n: expr]) => {
-        impl_integration_test!($fn, $db, $DB, $n);
+    ([$fn: ident, $($fn_: tt),*], [($d: expr, $D: ident)], [($h: expr, $H: ident)], [$n: expr]) => {
+        impl_integration_test!($fn, $d, $D, $h, $H, $n);
+        impl_test_with_all_params!([$($fn_),*], [($d, $D)], [($h, $H)], [$n]);
+    };
+
+    ([$fn: ident], [($d: expr, $D: ident)], [($h: expr, $H: ident)], [$n: expr]) => {
+        impl_integration_test!($fn, $d, $D, $h, $H, $n);
     };
 
     ($($other:tt)*) => {};
@@ -207,5 +217,6 @@ impl_test_with_all_params!(
         insert_keys_then_delete_keys_randomly
     ],
     [("hashmap", MemoryDB), ("rocksdb", RocksDB)],
+    [("blake2b", Blake2b), ("blake3", Blake3), ("sha3", Sha3)],
     [100, 500, 1000]
 );

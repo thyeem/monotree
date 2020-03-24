@@ -1,11 +1,12 @@
-use crate::consts::HASH_LEN;
 use crate::database::{MemoryDB, RocksDB};
+use crate::hasher::{Blake2b, Blake3, Sha3};
 use crate::tree::Monotree;
 use crate::utils::*;
+use crate::HASH_LEN;
 use crate::*;
 use std::fs;
 
-const N: usize = 10000;
+const N: usize = 10_000;
 
 pub fn perf() {
     let (keys, leaves): (Vec<Hash>, Vec<Hash>) = (0..N)
@@ -15,7 +16,7 @@ pub fn perf() {
     println!("random keys/leaves vec: #{:?}", keys.len());
 
     let monotree_hashmap = || {
-        let mut tree = Monotree::<MemoryDB>::new("hashmap");
+        let mut tree = Monotree::<MemoryDB, Blake3>::new("hashmap");
         let root = tree.new_tree();
         let mut keys = keys.clone();
         perf!(1, "Monotree: HashMap", {
@@ -31,7 +32,7 @@ pub fn perf() {
                 fs::remove_dir_all(&dbname).unwrap()
             }
         });
-        let mut tree = Monotree::<RocksDB>::new(&dbname);
+        let mut tree = Monotree::<RocksDB, Blake3>::new(&dbname);
         let mut root = tree.new_tree();
         let mut keys = keys.clone();
         perf!(1, "Monotree: RocksDB with batch", {
@@ -48,7 +49,7 @@ pub fn perf() {
                 fs::remove_dir_all(&dbname).unwrap()
             }
         });
-        let mut tree = Monotree::<RocksDB>::new(&dbname);
+        let mut tree = Monotree::<RocksDB, Blake3>::new(&dbname);
         let mut root = tree.new_tree();
         let mut keys = keys.clone();
         perf!(1, "Monotree: RocksDB without batch", {

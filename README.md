@@ -169,6 +169,13 @@ performs a micro-benchmark based on _Criterion [https://crates.io/crates/criteri
 ```
 
 and a macroscopic-time benchmark (but rather wider error bars) was also prepared in `perf.rs`.
+
+```rust
+    use monotree::perf;
+    fn main() {
+        perf::perf();
+    }
+```
 ```bash
     $ cargo run --release
 ```

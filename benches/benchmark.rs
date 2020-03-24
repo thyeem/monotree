@@ -4,8 +4,8 @@ extern crate criterion;
 extern crate paste;
 extern crate scopeguard;
 use criterion::{black_box, Criterion};
-use monotree::consts::HASH_LEN;
 use monotree::database::{MemoryDB, RocksDB};
+use monotree::hasher::{Blake2b, Blake3};
 use monotree::tree::Monotree;
 use monotree::utils::*;
 use monotree::Hash;
@@ -19,8 +19,8 @@ fn prepare(n: usize) -> (Vec<Hash>, Vec<Hash>) {
         .unzip()
 }
 
-fn insert<D: Database>(
-    tree: &mut Monotree<D>,
+fn insert<D: Database, H: Hasher>(
+    tree: &mut Monotree<D, H>,
     root: Option<Hash>,
     keys: &mut [Hash],
     leaves: &[Hash],
@@ -29,13 +29,13 @@ fn insert<D: Database>(
     tree.inserts(root.as_ref(), &keys, &leaves).unwrap()
 }
 
-fn get<D: Database>(tree: &mut Monotree<D>, root: Option<Hash>, keys: &[Hash]) {
+fn get<D: Database, H: Hasher>(tree: &mut Monotree<D, H>, root: Option<Hash>, keys: &[Hash]) {
     keys.iter().for_each(|key| {
         tree.get(root.as_ref(), key).unwrap();
     });
 }
 
-fn remove<D: Database>(tree: &mut Monotree<D>, root: Option<Hash>, keys: &[Hash]) {
+fn remove<D: Database, H: Hasher>(tree: &mut Monotree<D, H>, root: Option<Hash>, keys: &[Hash]) {
     tree.removes(root.as_ref(), keys).unwrap();
 }
 
@@ -47,7 +47,7 @@ macro_rules! impl_bench_group {
                 let (keys, leaves) = prepare($n);
 
                 group.bench_function("hashmap_insert", |b| {
-                    let mut tree = Monotree::<MemoryDB>::new("hashmap");
+                    let mut tree = Monotree::<MemoryDB, Blake2b>::new("hashmap");
                     let root = tree.new_tree();
                     let mut keys = keys.clone();
                     b.iter(|| {
@@ -67,7 +67,7 @@ macro_rules! impl_bench_group {
                             fs::remove_dir_all(&dbname).unwrap()
                         }
                     });
-                    let mut tree = Monotree::<RocksDB>::new(&dbname);
+                    let mut tree = Monotree::<RocksDB, Blake3>::new(&dbname);
                     let root = tree.new_tree();
                     let mut keys = keys.clone();
                     b.iter(|| {
@@ -81,7 +81,7 @@ macro_rules! impl_bench_group {
                 });
 
                 group.bench_function("hashmap_get", |b| {
-                    let mut tree = Monotree::<MemoryDB>::new("hashmap");
+                    let mut tree = Monotree::<MemoryDB, Blake3>::new("hashmap");
                     let mut root = tree.new_tree();
                     let mut keys = keys.clone();
                     root = insert(&mut tree, root, &mut keys, &leaves);
@@ -101,7 +101,7 @@ macro_rules! impl_bench_group {
                             fs::remove_dir_all(&dbname).unwrap()
                         }
                     });
-                    let mut tree = Monotree::<RocksDB>::new(&dbname);
+                    let mut tree = Monotree::<RocksDB, Blake3>::new(&dbname);
                     let mut root = tree.new_tree();
                     let mut keys = keys.clone();
                     root = insert(&mut tree, root, &mut keys, &leaves);
@@ -115,7 +115,7 @@ macro_rules! impl_bench_group {
                 });
 
                 group.bench_function("hashmap_remove", |b| {
-                    let mut tree = Monotree::<MemoryDB>::new("hashmap");
+                    let mut tree = Monotree::<MemoryDB, Blake3>::new("hashmap");
                     let mut root = tree.new_tree();
                     let mut keys = keys.clone();
                     root = insert(&mut tree, root, &mut keys, &leaves);
@@ -136,7 +136,7 @@ macro_rules! impl_bench_group {
                             fs::remove_dir_all(&dbname).unwrap()
                         }
                     });
-                    let mut tree = Monotree::<RocksDB>::new(&dbname);
+                    let mut tree = Monotree::<RocksDB, Blake3>::new(&dbname);
                     let mut root = tree.new_tree();
                     let mut keys = keys.clone();
                     root = insert(&mut tree, root, &mut keys, &leaves);

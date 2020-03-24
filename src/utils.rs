@@ -1,6 +1,4 @@
-use crate::consts::HASH_LEN;
-use crate::Hash;
-use blake2_rfc::blake2b::{blake2b, Blake2bResult};
+use crate::{Hash, HASH_LEN};
 use num::{NumCast, PrimInt};
 use rand::Rng;
 use std::cmp;
@@ -83,10 +81,6 @@ pub fn debug<T: std::fmt::Debug>(x: &T) {
 
 pub fn cast<T: NumCast, U: NumCast>(n: T) -> U {
     NumCast::from(n).expect("cast(): Numcast")
-}
-
-pub fn hash_fn_factory(n: usize) -> impl Fn(&[u8]) -> Blake2bResult {
-    move |x| blake2b(n, &[], x)
 }
 
 pub fn random_bytes(n: usize) -> Vec<u8> {

@@ -1,7 +1,7 @@
 use crate::bits::Bits;
-use crate::consts::HASH_LEN;
 use crate::utils::*;
 use crate::Result;
+use crate::HASH_LEN;
 
 pub type Cell<'a> = Option<Unit<'a>>;
 

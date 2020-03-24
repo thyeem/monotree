@@ -1,14 +1,13 @@
 use crate::bits::Bits;
-use crate::consts::*;
 use crate::node::{Node, Unit};
 use crate::utils::*;
-use crate::{Database, Hash, Proof, Result};
-use blake2_rfc::blake2b::blake2b;
+use crate::HASH_LEN;
+use crate::{Database, Hash, Hasher, Proof, Result};
 
 /// Example: How to use monotree
-/// ```rust
-///     use monotree::consts::HASH_LEN;
+/// ```
 ///     use monotree::database::{MemoryDB, RocksDB};
+///     use monotree::hasher::Blake2b;
 ///     use monotree::tree::Monotree;
 ///     use monotree::utils::*;
 ///     use monotree::*;
@@ -18,9 +17,9 @@ use blake2_rfc::blake2b::blake2b;
 ///     let leaves = random_hashes(100);
 ///
 ///     // init tree using either In-Memory HashMap
-///     let mut tree = Monotree::<MemoryDB>::new("hashmap");
+///     let mut tree = Monotree::<MemoryDB, Blake2b>::new("hashmap");
 ///     // or RocksDB. Use only one of them at a time
-///     // let mut tree = Monotree::<RocksDB>::new(DB_PATH);
+///     // let mut tree = Monotree::<RocksDB, Blake2b>::new(DB_PATH);
 ///     let mut root = tree.new_tree();
 ///     
 ///     // insert keys example with some assertions
@@ -57,14 +56,16 @@ use blake2_rfc::blake2b::blake2b;
 ///     assert_eq!(root, None);
 /// ```
 #[derive(Clone, Debug)]
-pub struct Monotree<D: Database> {
+pub struct Monotree<D: Database, H: Hasher> {
     db: D,
+    pub hasher: H,
 }
 
-impl<D: Database> Monotree<D> {
+impl<D: Database, H: Hasher> Monotree<D, H> {
     pub fn new(dbpath: &str) -> Self {
         let db = Database::new(dbpath);
-        Monotree { db }
+        let hasher = Hasher::new();
+        Monotree { db, hasher }
     }
 
     pub fn close(&mut self) -> Result<()> {
@@ -102,9 +103,9 @@ impl<D: Database> Monotree<D> {
 
     fn put_node(&mut self, node: Node) -> Result<Option<Hash>> {
         let bytes = node.to_bytes()?;
-        let hash = blake2b(HASH_LEN, &[], &bytes);
-        self.db.put(hash.as_bytes(), bytes)?;
-        Ok(slice_to_hash(hash.as_bytes()))
+        let hash = self.hasher.digest(&bytes);
+        self.db.put(hash.as_ref().expect("&hash"), bytes)?;
+        Ok(hash)
     }
 
     fn put(&mut self, root: &[u8], bits: Bits, leaf: &[u8]) -> Result<Option<Hash>> {
@@ -211,16 +212,19 @@ impl<D: Database> Monotree<D> {
     ///     // tree::verify_proof(ROOT_REF, VALUE, PROOF_REF)
     ///
     /// Example:
-    /// ```rust
+    /// ```
     ///     use monotree::tree;
-    ///     use monotree::database::MemoryDB;
-    ///     use monotree::utils::*;
-
+    ///     use monotree::database::{MemoryDB, RocksDB};
+    ///     use monotree::hasher::{Blake3, Blake2b};
+    ///     use monotree::{Database, Hasher};
+    ///     use monotree::utils::random_hashes;
+    ///
     ///     // prepare some random hashes for keys and leaves
     ///     let keys = random_hashes(100);
     ///     let leaves = random_hashes(100);
     ///     // init a Monotree
-    ///     let mut tree = tree::Monotree::<MemoryDB>::new("hashmap");
+    ///     let mut tree = tree::Monotree::<MemoryDB, Blake2b>::new("hashmap");
+    ///     let hasher = Blake2b::new();
     ///     let mut root = tree.new_tree();
     ///
     ///    // INTEGRITY: cumalative funtional test
@@ -231,7 +235,7 @@ impl<D: Database> Monotree<D> {
     ///        // where generate/verify Merkle proofs with all keys inserted so far
     ///        keys.iter().zip(leaves.iter()).take(i + 1).for_each(|(k, v)| {
     ///            let proof = tree.get_merkle_proof(root.as_ref(), k).unwrap().unwrap();
-    ///            assert_eq!(tree::verify_proof(root.as_ref(), v, &proof), true);
+    ///            assert_eq!(tree::verify_proof(&hasher, root.as_ref(), v, &proof), true);
     ///        });
     ///    });
     /// ```
@@ -280,17 +284,22 @@ impl<D: Database> Monotree<D> {
 
 /// No need to be a member of Monotree.
 /// This verification must be called independantly upon request.
-pub fn verify_proof(root: Option<&Hash>, leaf: &Hash, proof: &[(bool, Vec<u8>)]) -> bool {
-    let mut hash = leaf.to_vec();
+pub fn verify_proof<H: Hasher>(
+    hasher: &H,
+    root: Option<&Hash>,
+    leaf: &Hash,
+    proof: &[(bool, Vec<u8>)],
+) -> bool {
+    let mut hash = leaf.to_owned();
     proof.iter().rev().for_each(|(right, cut)| {
         if *right {
             let l = cut.len();
             let o = [&cut[..l - 1], &hash[..], &cut[l - 1..]].concat();
-            hash = blake2b(HASH_LEN, &[], &o).as_bytes().to_vec();
+            hash = hasher.digest(&o).expect("verify_proof(): right-hash");
         } else {
             let o = [&hash[..], &cut[..]].concat();
-            hash = blake2b(HASH_LEN, &[], &o).as_bytes().to_vec();
+            hash = hasher.digest(&o).expect("verify_proof(): left-hash");
         }
     });
-    root.expect("verify_proof(): root").to_vec() == hash
+    root.expect("verify_proof(): root") == &hash
 }
