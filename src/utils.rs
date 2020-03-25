@@ -1,22 +1,26 @@
-use crate::{Hash, HASH_LEN};
+//! A module for implementing some helpful functions for `monotree`.
+use crate::*;
 use num::{NumCast, PrimInt};
 use rand::Rng;
 use std::cmp;
 use std::ops::Range;
 
 #[macro_export]
+/// std::cmp::max() extension for use with multiple arguments.
 macro_rules! max {
-    ($x: expr) => ($x);
-    ($x: expr, $($e: expr),+) => (cmp::max($x, max!($($e),*)));
+    ($x:expr) => ($x);
+    ($x:expr, $($e:expr),+) => (cmp::max($x, max!($($e),+)));
 }
 
 #[macro_export]
+/// std::cmp::min() extension for use with multiple arguments.
 macro_rules! min {
-    ($x: expr) => ($x);
-    ($x: expr, $($e: expr),+) => (cmp::min($x, min!($($e),*)));
+    ($x:expr) => ($x);
+    ($x:expr, $($e:expr),+) => (cmp::min($x, min!($($e),+)));
 }
 
 #[macro_export]
+/// Convert `bytes` slice into `hex` string.
 macro_rules! hex {
     ($bytes:expr) => {{
         hex::encode($bytes)
@@ -24,8 +28,7 @@ macro_rules! hex {
 }
 
 #[macro_export]
-/// converts elapsed nano second into appropriate format of time
-/// fmtime!(elapsed nano secs as u128) -> &'static str
+/// Convert elapsed time in nano second (`u128`) into appropriate format of time (`String`).
 macro_rules! fmtime {
     ($t:expr) => {{
         match $t as f64 {
@@ -39,16 +42,11 @@ macro_rules! fmtime {
 }
 
 #[macro_export]
-/// Super-simple benchmark tool for measurement of runtime.
-/// For the given block code, it adds up total time
-/// during NUMBER_OF_LOOP-times run and then print and return it.
-/// When NUMBER_OF_LOOP is 0, just run once without STDOUT
+/// Simple benchmark tool for runtime measure of a code block.
 ///
-/// perf!(NUMBER_OF_LOOP, LABEL, {CODE BLOCK} ) -> nano secs as u128
-/// Example:
-///     perf!(NUMBER_OF_LOOP, LABEL, {
-///         // HERE-any-code-block-to-measure
-///     });
+/// For the given block code, it adds up total time during `LOOPS`-time run
+/// and then print and return the total time.
+/// When `LOOPS` is 0, it only runs once without `STDOUT`.
 macro_rules! perf {
     ($n:expr, $label:expr, $code:block) => {{
         let label = match $label.trim().len() {
@@ -75,42 +73,63 @@ macro_rules! perf {
     }};
 }
 
-pub fn debug<T: std::fmt::Debug>(x: &T) {
-    println!("{:?}", x);
-}
-
+/// Cast from a typed scalar to another based on `num_traits`
 pub fn cast<T: NumCast, U: NumCast>(n: T) -> U {
     NumCast::from(n).expect("cast(): Numcast")
 }
 
+/// Generate a random byte based on `rand::random`.
+pub fn random_byte() -> u8 {
+    rand::random::<u8>()
+}
+
+/// Generate random bytes of the given length.
 pub fn random_bytes(n: usize) -> Vec<u8> {
-    (0..n).map(|_| rand::random::<u8>()).collect()
+    (0..n).map(|_| random_byte()).collect()
 }
 
+/// Generate a random `Hash`, byte-array of `HASH_LEN` length.
+pub fn random_hash() -> Hash {
+    slice_to_hash(&random_bytes(HASH_LEN))
+}
+
+/// Generate a vector of random `Hash` with the given length.
 pub fn random_hashes(n: usize) -> Vec<Hash> {
-    (0..n)
-        .map(|_| random_bytes(HASH_LEN))
-        .map(|x| slice_to_hash(&x).unwrap())
-        .collect()
+    (0..n).map(|_| random_hash()).collect()
 }
 
-pub fn slice_to_hash(slice: &[u8]) -> Option<Hash> {
+/// Get a fixed lenght byte-array or `Hash` from slice.
+pub fn slice_to_hash(slice: &[u8]) -> Hash {
     let mut hash = [0x00; HASH_LEN];
     hash.copy_from_slice(slice);
-    Some(hash)
+    hash
 }
 
-// Fisher-Yates shuffle
-pub fn shuffle<T: Clone>(v: &mut Vec<T>) {
+/// Shuffle a slice using _Fisher-Yates_ algorithm.
+pub fn shuffle<T: Clone>(slice: &mut [T]) {
     let mut rng = rand::thread_rng();
-    let s = v.len();
-    (1..s).for_each(|i| {
-        let q = rng.gen_range(0, s - i);
-        v.swap(i, q);
+    let s = slice.len();
+    (0..s).for_each(|i| {
+        let q = rng.gen_range(0, s);
+        slice.swap(i, q);
     });
 }
 
-/// get length of the Longest Common Prefix bits for a set of two bytes
+/// Get sorted indices from unsorted slice.
+pub fn get_sorted_indices<T>(slice: &[T], reverse: bool) -> Vec<usize>
+where
+    T: Clone + cmp::Ord,
+{
+    let mut t: Vec<_> = slice.iter().enumerate().collect();
+    if reverse {
+        t.sort_unstable_by(|(_, a), (_, b)| b.cmp(a));
+    } else {
+        t.sort_unstable_by(|(_, a), (_, b)| a.cmp(b));
+    }
+    t.iter().map(|(i, _)| *i).collect()
+}
+
+/// Get length of the longest common prefix bits for the given two slices.
 pub fn len_lcp<T>(a: &[u8], m: &Range<T>, b: &[u8], n: &Range<T>) -> T
 where
     T: PrimInt + NumCast,
@@ -122,14 +141,14 @@ where
     cast(count)
 }
 
-/// get ith-index-bit from bytes
-/// note that index i starts from 0
+/// Get `i`-th bit from bytes slice. Index `i` starts from 0.
 pub fn bit<T: PrimInt + NumCast>(bytes: &[u8], i: T) -> bool {
     let q = i.to_usize().expect("bit(): usize") / 8;
     let r = i.to_u8().expect("bit(): u8") % 8;
     (bytes[q] >> (7 - r)) & 0x01 == 0x01
 }
 
+/// Get the required length of bytes from a `Range`, bits indices across the bytes.
 pub fn nbytes_across<T: PrimInt + NumCast>(start: T, end: T) -> T {
     let n = (end - (start - start % cast(8))) / cast(8);
     if end % cast(8) == cast(0) {
@@ -139,6 +158,8 @@ pub fn nbytes_across<T: PrimInt + NumCast>(start: T, end: T) -> T {
     }
 }
 
+/// Adjust the bytes representation for `Bits` when shifted.
+/// Returns a bytes shift, `n` and thereby resulting shifted range, `R`.
 pub fn offsets<T: PrimInt + NumCast>(range: &Range<T>, n: T, tail: bool) -> (T, Range<T>) {
     let x = range.start + n;
     let e: T = cast(8);
@@ -149,9 +170,7 @@ pub fn offsets<T: PrimInt + NumCast>(range: &Range<T>, n: T, tail: bool) -> (T, 
     }
 }
 
-/// convert any big-endian bytes into base10 integer (decimal number)
-/// slightly slower than {integer}::from_be_bytes(),
-/// but can go with various length of bytes
+/// Convert big-endian bytes into base10 or decimal number.
 pub fn bytes_to_int<T: PrimInt + NumCast>(bytes: &[u8]) -> T {
     let l = bytes.len();
     let sum = (0..l).fold(0, |sum, i| {
@@ -160,8 +179,7 @@ pub fn bytes_to_int<T: PrimInt + NumCast>(bytes: &[u8]) -> T {
     cast(sum)
 }
 
-/// {integer}::to_be_bytes()'s enough, but sometimes need to compress bytes
-/// cutting down big-endian bytes leading zero
+/// Get a compressed bytes (leading-zero-truncated big-endian bytes) from a `u64`.
 pub fn int_to_bytes(number: u64) -> Vec<u8> {
     match number {
         0 => vec![0x00],
@@ -174,15 +192,18 @@ pub fn int_to_bytes(number: u64) -> Vec<u8> {
     }
 }
 
+/// Convert a Vec slice of bit or `bool` into a number as `usize`.
 pub fn bits_to_usize(bits: &[bool]) -> usize {
     let l = bits.len();
     (0..l).fold(0, |sum, i| sum + ((bits[i] as usize) << (l - 1 - i)))
 }
 
+/// Convert a bytes slice into a Vec of bit.
 pub fn bytes_to_bits(bytes: &[u8]) -> Vec<bool> {
     bytes_to_slicebit(bytes, &(0..bytes.len() * 8))
 }
 
+/// Convert (bytes slice + Range) representation into bits in forms of `Vec<bool>`.
 pub fn bytes_to_slicebit<T>(bytes: &[u8], range: &Range<T>) -> Vec<bool>
 where
     T: PrimInt + NumCast,
@@ -191,6 +212,7 @@ where
     range.clone().map(|x| bit(bytes, x)).collect()
 }
 
+/// Convert bits, Vec slice of `bool` into bytes, `Vec<u8>`.
 pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
     bits.rchunks(8)
         .rev()

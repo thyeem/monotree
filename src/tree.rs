@@ -1,96 +1,32 @@
-use crate::bits::Bits;
-use crate::node::{Node, Unit};
+//! A module implementing `monotree`.
 use crate::utils::*;
-use crate::HASH_LEN;
-use crate::{Database, Hash, Hasher, Proof, Result};
+use crate::*;
 
-/// Example: How to use monotree
-/// ```
-///     use monotree::database::{MemoryDB, RocksDB};
-///     use monotree::hasher::Blake2b;
-///     use monotree::tree::Monotree;
-///     use monotree::utils::*;
-///     use monotree::*;
-///
-///     // prepare some random hashes for keys and leaves
-///     let keys = random_hashes(100);
-///     let leaves = random_hashes(100);
-///
-///     // init tree using either In-Memory HashMap
-///     let mut tree = Monotree::<MemoryDB, Blake2b>::new("hashmap");
-///     // or RocksDB. Use only one of them at a time
-///     // let mut tree = Monotree::<RocksDB, Blake2b>::new(DB_PATH);
-///     let mut root = tree.new_tree();
-///     
-///     // insert keys example with some assertions
-///     keys.iter().zip(leaves.iter()).enumerate().for_each(|(i, (key, value))| {
-///         // insert a key
-///         root = tree.insert(root.as_ref(), key, value).unwrap();
-///
-///         //--- functional test: insert/get
-///         keys.iter().zip(leaves.iter()).take(i + 1).for_each(|(k, v)| {
-///             // check if the key-value pair was correctly inserted so far
-///             assert_eq!(tree.get(root.as_ref(), k).unwrap(), Some(*v));
-///         });
-///     });
-///     assert_ne!(root, None);
-///
-///     // delete keys example with some assertions
-///     keys.iter().zip(leaves.iter()).enumerate().for_each(|(i, (key, _))| {
-///
-///         //--- functional test: remove
-///         // assert that all values are fine after deletion
-///         assert_ne!(root, None);
-///         keys.iter().zip(leaves.iter()).skip(i).for_each(|(k, v)| {
-///             assert_eq!(tree.get(root.as_ref(), k).unwrap(), Some(*v));
-///         });
-///
-///         // delete a key
-///         root = tree.remove(root.as_ref(), key).unwrap();
-///
-///         // check if the key was correctly deleted
-///         assert_eq!(tree.get(root.as_ref(), key).unwrap(), None);
-///     });
-///
-///     // back to inital state of tree
-///     assert_eq!(root, None);
-/// ```
-#[derive(Clone, Debug)]
-pub struct Monotree<D: Database, H: Hasher> {
+/// A structure for `monotree`.
+#[derive(Debug)]
+pub struct Monotree<D = DefaultDatabase, H = DefaultHasher> {
     db: D,
-    pub hasher: H,
+    hasher: H,
 }
 
-impl<D: Database, H: Hasher> Monotree<D, H> {
+impl Default for Monotree<DefaultDatabase, DefaultHasher> {
+    fn default() -> Self {
+        Self::new("monotree")
+    }
+}
+
+impl<D, H> Monotree<D, H>
+where
+    D: Database,
+    H: Hasher,
+{
     pub fn new(dbpath: &str) -> Self {
         let db = Database::new(dbpath);
         let hasher = Hasher::new();
         Monotree { db, hasher }
     }
 
-    pub fn close(&mut self) -> Result<()> {
-        self.db.close()
-    }
-
-    pub fn new_tree(&mut self) -> Option<Hash> {
-        None
-    }
-
-    pub fn inserts(
-        &mut self,
-        root: Option<&Hash>,
-        keys: &[Hash],
-        leaves: &[Hash],
-    ) -> Result<Option<Hash>> {
-        let mut root = root.cloned();
-        self.db.init_batch()?;
-        for (key, leaf) in keys.iter().zip(leaves.iter()) {
-            root = self.insert(root.as_ref(), key, leaf)?;
-        }
-        self.db.write_batch()?;
-        Ok(root)
-    }
-
+    /// Insert key-leaf entry into the `monotree`. Returns a new root hash.
     pub fn insert(&mut self, root: Option<&Hash>, key: &Hash, leaf: &Hash) -> Result<Option<Hash>> {
         match root {
             None => {
@@ -104,12 +40,37 @@ impl<D: Database, H: Hasher> Monotree<D, H> {
     fn put_node(&mut self, node: Node) -> Result<Option<Hash>> {
         let bytes = node.to_bytes()?;
         let hash = self.hasher.digest(&bytes);
-        self.db.put(hash.as_ref().expect("&hash"), bytes)?;
-        Ok(hash)
+        self.db.put(&hash, bytes)?;
+        Ok(Some(hash))
     }
 
+    /// Recursively insert a bytes (in forms of Bits) and a leaf into the tree.  
+    ///
+    /// Optimization in `monotree` is mainly to compress the path as much as possible
+    /// while reducing the number of db accesses using the most intuitive model.
+    /// As a result, compared to the standard Sparse Merkle Tree,
+    /// this reduces the number of DB accesses from `N` to `log2(N)` in both reads and writes.
+    ///
+    /// Whenever invoked a `put()` call, at least, more than one `put_node()` called,
+    /// which triggers a single hash digest + a single DB write.  
+    /// Compressing the path recudes the number of `put()` calls, which yields
+    /// reducing the number of hash function calls as well as the number of DB writes.  
+    ///
+    /// There are four modes when putting the entries.
+    /// And each of them is processed in a (recursive) `put()` call.
+    /// The number in parenthesis refers to the minimum of DB access and hash fn call required.
+    ///
+    /// * set-aside (1)
+    ///     putting the leaf to the next node in the current depth.
+    /// * replacement (1)
+    ///     replacement the existing node on the path with the new leaf.
+    /// * consume & pass-over (2+)
+    ///     consuming the path on the way, then pass the rest of work to their child node.
+    /// * split-node (2)
+    ///     immediately split node into two with the longest common prefix,
+    ///     then wind the recursive stack from there returning resulting hashes.
     fn put(&mut self, root: &[u8], bits: Bits, leaf: &[u8]) -> Result<Option<Hash>> {
-        let bytes = self.db.get(root)?;
+        let bytes = self.db.get(root)?.expect("bytes");
         let (lc, rc) = Node::cells_from_bytes(&bytes, bits.first())?;
         let unit = lc.as_ref().expect("put(): left-unit");
         let n = Bits::len_common_bits(&unit.bits, &bits);
@@ -140,7 +101,8 @@ impl<D: Database, H: Hasher> Monotree<D, H> {
         }
     }
 
-    pub fn get(&mut self, root: Option<&Hash>, key: &[u8]) -> Result<Option<Hash>> {
+    /// Get a leaf hash for the given root and key.
+    pub fn get(&mut self, root: Option<&Hash>, key: &Hash) -> Result<Option<Hash>> {
         match root {
             None => Ok(None),
             Some(root) => self.find_key(root, Bits::new(key)),
@@ -148,27 +110,18 @@ impl<D: Database, H: Hasher> Monotree<D, H> {
     }
 
     fn find_key(&mut self, root: &[u8], bits: Bits) -> Result<Option<Hash>> {
-        let bytes = self.db.get(root)?;
+        let bytes = self.db.get(root)?.expect("bytes");
         let (cell, _) = Node::cells_from_bytes(&bytes, bits.first())?;
         let unit = cell.as_ref().expect("find_key(): left-unit");
         let n = Bits::len_common_bits(&unit.bits, &bits);
         match n {
-            n if n == bits.len() => Ok(slice_to_hash(unit.hash)),
+            n if n == bits.len() => Ok(Some(slice_to_hash(unit.hash))),
             n if n == unit.bits.len() => self.find_key(&unit.hash, bits.shift(n, false)),
             _ => Ok(None),
         }
     }
 
-    pub fn removes(&mut self, root: Option<&Hash>, keys: &[Hash]) -> Result<Option<Hash>> {
-        let mut root = root.cloned();
-        self.db.init_batch()?;
-        for key in keys.iter() {
-            root = self.remove(root.as_ref(), key)?;
-        }
-        self.db.write_batch()?;
-        Ok(root)
-    }
-
+    /// Remove the given key and its corresponding leaf from the tree. Returns a new root hash.
     pub fn remove(&mut self, root: Option<&Hash>, key: &[u8]) -> Result<Option<Hash>> {
         match root {
             None => Ok(None),
@@ -177,7 +130,7 @@ impl<D: Database, H: Hasher> Monotree<D, H> {
     }
 
     fn delete_key(&mut self, root: &[u8], bits: Bits) -> Result<Option<Hash>> {
-        let bytes = self.db.get(root)?;
+        let bytes = self.db.get(root)?.expect("bytes");
         let (lc, rc) = Node::cells_from_bytes(&bytes, bits.first())?;
         let unit = lc.as_ref().expect("delete_key(): left-unit");
         let n = Bits::len_common_bits(&unit.bits, &bits);
@@ -202,43 +155,45 @@ impl<D: Database, H: Hasher> Monotree<D, H> {
         }
     }
 
-    /// Merkle proof secion: verifying inclusion of data -----------------------
-    /// In order to prove proofs, use verify_proof() at the end of file below.
-    /// Outline:
-    ///     // generate a proof simply,
-    ///     // let proof = tree.get_merkle_proof(ROOT_REF, KEY_REF)?.unwrap();
-    ///
-    ///     // verify proof: returns true or false as the result
-    ///     // tree::verify_proof(ROOT_REF, VALUE, PROOF_REF)
-    ///
-    /// Example:
-    /// ```
-    ///     use monotree::tree;
-    ///     use monotree::database::{MemoryDB, RocksDB};
-    ///     use monotree::hasher::{Blake3, Blake2b};
-    ///     use monotree::{Database, Hasher};
-    ///     use monotree::utils::random_hashes;
-    ///
-    ///     // prepare some random hashes for keys and leaves
-    ///     let keys = random_hashes(100);
-    ///     let leaves = random_hashes(100);
-    ///     // init a Monotree
-    ///     let mut tree = tree::Monotree::<MemoryDB, Blake2b>::new("hashmap");
-    ///     let hasher = Blake2b::new();
-    ///     let mut root = tree.new_tree();
-    ///
-    ///    // INTEGRITY: cumalative funtional test
-    ///    keys.iter().zip(leaves.iter()).enumerate().for_each(|(i, (key, value))| {
-    ///        // insert each key and update root
-    ///        root = tree.insert(root.as_ref(), key, value).unwrap();
-    ///
-    ///        // where generate/verify Merkle proofs with all keys inserted so far
-    ///        keys.iter().zip(leaves.iter()).take(i + 1).for_each(|(k, v)| {
-    ///            let proof = tree.get_merkle_proof(root.as_ref(), k).unwrap().unwrap();
-    ///            assert_eq!(tree::verify_proof(&hasher, root.as_ref(), v, &proof), true);
-    ///        });
-    ///    });
-    /// ```
+    /// This method is intended to use the `insert()` method in batch mode.
+    pub fn inserts(
+        &mut self,
+        root: Option<&Hash>,
+        keys: &[Hash],
+        leaves: &[Hash],
+    ) -> Result<Option<Hash>> {
+        let indices = get_sorted_indices(keys, false);
+        self.db.init_batch()?;
+        let mut root = root.cloned();
+        for i in indices.iter() {
+            root = self.insert(root.as_ref(), &keys[*i], &leaves[*i])?;
+        }
+        self.db.finish_batch()?;
+        Ok(root)
+    }
+
+    /// This method is intended to use the `get()` method in batch mode.
+    pub fn gets(&mut self, root: Option<&Hash>, keys: &[Hash]) -> Result<Vec<Option<Hash>>> {
+        let mut leaves: Vec<Option<Hash>> = Vec::new();
+        for key in keys.iter() {
+            leaves.push(self.get(root, key)?);
+        }
+        Ok(leaves)
+    }
+
+    /// This method is intended to use the `remove()` method in batch mode.
+    pub fn removes(&mut self, root: Option<&Hash>, keys: &[Hash]) -> Result<Option<Hash>> {
+        let indices = get_sorted_indices(keys, false);
+        let mut root = root.cloned();
+        self.db.init_batch()?;
+        for i in indices.iter() {
+            root = self.remove(root.as_ref(), &keys[*i])?;
+        }
+        self.db.finish_batch()?;
+        Ok(root)
+    }
+
+    /// Generate a Merkle proof for the given root and key.
     pub fn get_merkle_proof(&mut self, root: Option<&Hash>, key: &[u8]) -> Result<Option<Proof>> {
         let mut proof: Proof = Vec::new();
         match root {
@@ -248,7 +203,7 @@ impl<D: Database, H: Hasher> Monotree<D, H> {
     }
 
     fn gen_proof(&mut self, root: &[u8], bits: Bits, proof: &mut Proof) -> Result<Option<Proof>> {
-        let bytes = self.db.get(root)?;
+        let bytes = self.db.get(root)?.expect("bytes");
         let (cell, _) = Node::cells_from_bytes(&bytes, bits.first())?;
         let unit = cell.as_ref().expect("gen_proof(): left-unit");
         let n = Bits::len_common_bits(&unit.bits, &bits);
@@ -282,24 +237,31 @@ impl<D: Database, H: Hasher> Monotree<D, H> {
     }
 }
 
-/// No need to be a member of Monotree.
-/// This verification must be called independantly upon request.
+/// Verify a Merkle proof with the given root, leaf and hasher if the proof is valid or not.
+///
+/// Be aware of that it fails if not provided a suitable hasher used in the tree
+/// This generic fn must be independantly called upon request, not a member of Monotree.
 pub fn verify_proof<H: Hasher>(
     hasher: &H,
     root: Option<&Hash>,
     leaf: &Hash,
-    proof: &[(bool, Vec<u8>)],
+    proof: Option<&Proof>,
 ) -> bool {
-    let mut hash = leaf.to_owned();
-    proof.iter().rev().for_each(|(right, cut)| {
-        if *right {
-            let l = cut.len();
-            let o = [&cut[..l - 1], &hash[..], &cut[l - 1..]].concat();
-            hash = hasher.digest(&o).expect("verify_proof(): right-hash");
-        } else {
-            let o = [&hash[..], &cut[..]].concat();
-            hash = hasher.digest(&o).expect("verify_proof(): left-hash");
+    match proof {
+        None => false,
+        Some(proof) => {
+            let mut hash = leaf.to_owned();
+            proof.iter().rev().for_each(|(right, cut)| {
+                if *right {
+                    let l = cut.len();
+                    let o = [&cut[..l - 1], &hash[..], &cut[l - 1..]].concat();
+                    hash = hasher.digest(&o);
+                } else {
+                    let o = [&hash[..], &cut[..]].concat();
+                    hash = hasher.digest(&o);
+                }
+            });
+            root.expect("verify_proof(): root") == &hash
         }
-    });
-    root.expect("verify_proof(): root") == &hash
+    }
 }

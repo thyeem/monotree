@@ -1,213 +1,232 @@
-use monotree::database::{MemoryDB, RocksDB};
-use monotree::hasher::{Blake2b, Blake3, Sha3};
-use monotree::tree::Monotree;
+use monotree::database::*;
+use monotree::hasher::*;
 use monotree::utils::*;
 use monotree::*;
 use std::fs;
 
-#[macro_use]
 extern crate paste;
 extern crate scopeguard;
-
-fn gen_random_pairs(n: usize) -> Vec<(Hash, Hash)> {
-    (0..n)
-        .map(|_| (random_bytes(HASH_LEN), random_bytes(HASH_LEN)))
-        .map(|x| (slice_to_hash(&x.0).unwrap(), slice_to_hash(&x.1).unwrap()))
-        .collect()
-}
 
 fn insert_keys_then_verify_values<D: Database, H: Hasher>(
     mut tree: Monotree<D, H>,
     _hasher: &H,
     mut root: Option<Hash>,
-    pairs: &[(Hash, Hash)],
-) {
-    pairs.iter().enumerate().for_each(|(i, (key, value))| {
-        // insert a key
-        root = tree.insert(root.as_ref(), key, value).unwrap();
-        pairs.iter().take(i + 1).for_each(|(k, v)| {
-            // check if the key-value pair was correctly inserted so far
-            assert_eq!(tree.get(root.as_ref(), k).unwrap(), Some(*v));
-        });
-    });
+    keys: &[Hash],
+    leaves: &[Hash],
+) -> Result<()> {
+    for (i, (key, value)) in keys.iter().zip(leaves.iter()).enumerate() {
+        // insert a key into tree
+        root = tree.insert(root.as_ref(), key, value)?;
+
+        // check if the key-value pair was correctly inserted so far
+        for (k, v) in keys.iter().zip(leaves.iter()).take(i + 1) {
+            assert_eq!(tree.get(root.as_ref(), k)?, Some(*v));
+        }
+    }
     assert_ne!(root, None);
+    Ok(())
 }
 
 fn insert_keys_then_gen_and_verify_proof<D: Database, H: Hasher>(
     mut tree: Monotree<D, H>,
     hasher: &H,
     mut root: Option<Hash>,
-    pairs: &[(Hash, Hash)],
-) {
-    pairs.iter().enumerate().for_each(|(i, (key, value))| {
-        // insert a key
-        root = tree.insert(root.as_ref(), key, value).unwrap();
-        pairs.iter().take(i + 1).for_each(|(k, v)| {
-            // gen/verify Merkle proof with all keys so far
-            let proof = tree.get_merkle_proof(root.as_ref(), k).unwrap().unwrap();
-            assert_eq!(tree::verify_proof(hasher, root.as_ref(), v, &proof), true);
-        });
-    });
+    keys: &[Hash],
+    leaves: &[Hash],
+) -> Result<()> {
+    for (i, (key, value)) in keys.iter().zip(leaves.iter()).enumerate() {
+        // insert a key into tree
+        root = tree.insert(root.as_ref(), key, value)?;
+
+        // generate and verify Merkle proof with all keys so far
+        for (k, v) in keys.iter().zip(leaves.iter()).take(i + 1) {
+            let proof = tree.get_merkle_proof(root.as_ref(), k)?;
+            assert_eq!(
+                tree::verify_proof(hasher, root.as_ref(), v, proof.as_ref()),
+                true
+            );
+        }
+    }
     assert_ne!(root, None);
+    Ok(())
 }
 
 fn insert_keys_then_delete_keys_in_order<D: Database, H: Hasher>(
     mut tree: Monotree<D, H>,
     hasher: &H,
     mut root: Option<Hash>,
-    pairs: &[(Hash, Hash)],
-) {
-    pairs.iter().for_each(|(key, value)| {
-        root = tree.insert(root.as_ref(), key, value).unwrap();
-    });
-    //test with keys in order
-    pairs.iter().enumerate().for_each(|(i, (key, _))| {
+    keys: &[Hash],
+    leaves: &[Hash],
+) -> Result<()> {
+    // pre-insertion for removal test
+    root = tree.inserts(root.as_ref(), keys, leaves)?;
+
+    // removal test with keys in order
+    for (i, (key, _)) in keys.iter().zip(leaves.iter()).enumerate() {
         assert_ne!(root, None);
-        // assert that all values are fine after deletion
-        pairs.iter().skip(i).for_each(|(k, v)| {
-            assert_eq!(tree.get(root.as_ref(), k).unwrap(), Some(*v));
-            let proof = tree.get_merkle_proof(root.as_ref(), k).unwrap().unwrap();
-            assert_eq!(tree::verify_proof(hasher, root.as_ref(), v, &proof), true);
-        });
-        // delete a key
-        root = tree.remove(root.as_ref(), key).unwrap();
-        assert_eq!(tree.get(root.as_ref(), key).unwrap(), None);
-    });
+        // assert that all other values are fine after deletion
+        for (k, v) in keys.iter().zip(leaves.iter()).skip(i) {
+            assert_eq!(tree.get(root.as_ref(), k)?, Some(*v));
+            let proof = tree.get_merkle_proof(root.as_ref(), k)?;
+            assert_eq!(
+                tree::verify_proof(hasher, root.as_ref(), v, proof.as_ref()),
+                true
+            );
+        }
+
+        // delete a key and check if it worked
+        root = tree.remove(root.as_ref(), key)?;
+        assert_eq!(tree.get(root.as_ref(), key)?, None);
+    }
     // back to inital state of tree
     assert_eq!(root, None);
+    Ok(())
 }
 
 fn insert_keys_then_delete_keys_reversely<D: Database, H: Hasher>(
     mut tree: Monotree<D, H>,
     hasher: &H,
     mut root: Option<Hash>,
-    pairs: &[(Hash, Hash)],
-) {
-    pairs.iter().for_each(|(key, value)| {
-        root = tree.insert(root.as_ref(), key, value).unwrap();
-    });
-    //test with keys in reverse order
-    pairs.iter().rev().enumerate().for_each(|(i, (key, _))| {
+    keys: &[Hash],
+    leaves: &[Hash],
+) -> Result<()> {
+    // pre-insertion for removal test
+    root = tree.inserts(root.as_ref(), keys, leaves)?;
+
+    // removal test with keys in reverse order
+    for (i, (key, _)) in keys.iter().zip(leaves.iter()).rev().enumerate() {
         assert_ne!(root, None);
-        // assert that all values are fine after deletion
-        pairs.iter().rev().skip(i).for_each(|(k, v)| {
-            assert_eq!(tree.get(root.as_ref(), k).unwrap(), Some(*v));
-            let proof = tree.get_merkle_proof(root.as_ref(), k).unwrap().unwrap();
-            assert_eq!(tree::verify_proof(hasher, root.as_ref(), v, &proof), true);
-        });
-        // delete a key
-        root = tree.remove(root.as_ref(), key).unwrap();
-        assert_eq!(tree.get(root.as_ref(), key).unwrap(), None);
-    });
+
+        // assert that all other values are fine after deletion
+        for (k, v) in keys.iter().zip(leaves.iter()).rev().skip(i) {
+            assert_eq!(tree.get(root.as_ref(), k)?, Some(*v));
+            let proof = tree.get_merkle_proof(root.as_ref(), k)?;
+            assert_eq!(
+                tree::verify_proof(hasher, root.as_ref(), v, proof.as_ref()),
+                true
+            );
+        }
+
+        // delete a key and check if it worked
+        root = tree.remove(root.as_ref(), key)?;
+        assert_eq!(tree.get(root.as_ref(), key)?, None);
+    }
     // back to inital state of tree
     assert_eq!(root, None);
+    Ok(())
 }
 
 fn insert_keys_then_delete_keys_randomly<D: Database, H: Hasher>(
     mut tree: Monotree<D, H>,
     hasher: &H,
     mut root: Option<Hash>,
-    pairs: &[(Hash, Hash)],
-) {
-    pairs.iter().for_each(|(key, value)| {
-        root = tree.insert(root.as_ref(), key, value).unwrap();
-    });
+    keys: &[Hash],
+    leaves: &[Hash],
+) -> Result<()> {
+    // pre-insertion for removal test
+    root = tree.inserts(root.as_ref(), keys, leaves)?;
 
-    // shuffles pairs' index for imitating random-access
-    let mut idx: Vec<usize> = (0..pairs.len()).collect();
+    // shuffles keys/leaves' index for imitating random-access
+    let mut idx: Vec<usize> = (0..keys.len()).collect();
     shuffle(&mut idx);
 
     //test with shuffled keys
-    idx.iter().enumerate().for_each(|(n, i)| {
+    for (n, i) in idx.iter().enumerate() {
         assert_ne!(root, None);
+
         // assert that all values are fine after deletion
-        idx.iter().skip(n).for_each(|j| {
+        for j in idx.iter().skip(n) {
+            assert_eq!(tree.get(root.as_ref(), &keys[*j])?, Some(leaves[*j]));
+            let proof = tree.get_merkle_proof(root.as_ref(), &keys[*j])?;
             assert_eq!(
-                tree.get(root.as_ref(), &pairs[*j].0).unwrap(),
-                Some(pairs[*j].1)
-            );
-            let proof = tree
-                .get_merkle_proof(root.as_ref(), &pairs[*j].0)
-                .unwrap()
-                .unwrap();
-            assert_eq!(
-                tree::verify_proof(hasher, root.as_ref(), &pairs[*j].1, &proof),
+                tree::verify_proof(hasher, root.as_ref(), &leaves[*j], proof.as_ref()),
                 true
             );
-        });
-        // delete a key by random index
-        root = tree.remove(root.as_ref(), &pairs[*i].0).unwrap();
-        assert_eq!(tree.get(root.as_ref(), &pairs[*i].1).unwrap(), None);
-    });
+        }
+        // delete a key by random index and check if it worked
+        root = tree.remove(root.as_ref(), &keys[*i])?;
+        assert_eq!(tree.get(root.as_ref(), &leaves[*i])?, None);
+    }
     // back to inital state of tree
     assert_eq!(root, None);
+    Ok(())
 }
 
 fn insert_keys_then_delete_keys_immediately<D: Database, H: Hasher>(
     mut tree: Monotree<D, H>,
     _hasher: &H,
     mut root: Option<Hash>,
-    pairs: &[(Hash, Hash)],
-) {
-    pairs.iter().for_each(|(key, value)| {
-        root = tree.insert(root.as_ref(), key, value).unwrap();
-        assert_eq!(tree.get(root.as_ref(), key).unwrap(), Some(*value));
-        root = tree.remove(root.as_ref(), key).unwrap();
-        assert_eq!(tree.get(root.as_ref(), key).unwrap(), None);
+    keys: &[Hash],
+    leaves: &[Hash],
+) -> Result<()> {
+    for (key, value) in keys.iter().zip(leaves.iter()) {
+        // insert a key into tree
+        root = tree.insert(root.as_ref(), key, value)?;
+        // check if the key-value pair was correctly inserted
+        assert_eq!(tree.get(root.as_ref(), key)?, Some(*value));
+
+        // delete the key inserted just before
+        root = tree.remove(root.as_ref(), key)?;
+        // check if the key-value pair was correctly deleted
+        assert_eq!(tree.get(root.as_ref(), key)?, None);
+        // must be inital state of tree
         assert_eq!(root, None);
-    });
+    }
+    Ok(())
 }
 
 macro_rules! impl_integration_test {
-    ($fn: ident, $d: expr, $D:ident, $h: expr, $H: ident, $n:expr) => {
-        item_with_macros! {
+    ($fn:ident, ($d:expr, $db:ident), ($h:expr, $hasher:ident), $n:expr) => {
+        paste::item_with_macros! {
             #[test]
-            fn [<test_ $d _ $h _ $fn _ $n>]() {
-                let dbname = hex!(random_bytes(4));
+            fn [<test_ $d _ $h _ $fn _ $n>]() -> Result<()> {
+                let dbname = format!(".tmp/{}", hex!(random_bytes(4)));
                 let _g = scopeguard::guard((), |_| {
                     if fs::metadata(&dbname).is_ok() {
                         fs::remove_dir_all(&dbname).unwrap()
                     }
                 });
-                let pairs = gen_random_pairs($n);
-                let mut tree = Monotree::<$D, $H>::new(&dbname);
-                let hasher = $H::new();
-                let root = tree.new_tree();
-                $fn(tree, &hasher, root, &pairs);
+                let keys = random_hashes($n);
+                let leaves = random_hashes($n);
+                let tree = Monotree::<$db, $hasher>::new(&dbname);
+                let hasher = $hasher::new();
+                let root: Option<Hash> = None;
+                $fn(tree, &hasher, root, &keys, &leaves)?;
+                Ok(())
             }
         }
     };
 }
 
-macro_rules! impl_test_with_all_params {
-    ([$($fn: tt),*], [$(($d: tt, $D: tt)),*], [$(($h: tt, $H: tt)),*], [$n: expr, $($n_: tt),*]) => {
-        impl_test_with_all_params!([$($fn),*], [$(($d, $D)),*], [$(($h, $H)),*], [$n]);
-        impl_test_with_all_params!([$($fn),*], [$(($d, $D)),*], [$(($h, $H)),*], [$($n_),*]);
+macro_rules! impl_test_with_params {
+    ([$($fn:tt)+], [$($db:tt)+], [$($hasher:tt)+], [$n:tt, $($ns:tt),*]) => {
+        impl_test_with_params!([$($fn)+], [$($db)+], [$($hasher)+], [$n]);
+        impl_test_with_params!([$($fn)+], [$($db)+], [$($hasher)+], [$($ns),*]);
     };
 
-    ([$($fn: tt),*], [$(($d: tt, $D: tt)),*], [($h: expr, $H: ident), $(($h_: tt, $H_: tt)),*], [$n: expr]) => {
-        impl_test_with_all_params!([$($fn),*], [$(($d, $D)),*], [($h, $H)], [$n]);
-        impl_test_with_all_params!([$($fn),*], [$(($d, $D)),*], [$(($h_, $H_)),*], [$n]);
+    ([$($fn:tt)+], [$($db:tt)+], [($($h:tt)+), $($hasher:tt),*], [$n:tt]) => {
+        impl_test_with_params!([$($fn)+], [$($db)+], [($($h)+)], [$n]);
+        impl_test_with_params!([$($fn)+], [$($db)+], [$($hasher),*], [$n]);
     };
 
-    ([$($fn: tt),*], [($d: expr, $D: ident), $(($d_: tt, $D_: tt)),*], [($h: expr, $H: ident)], [$n: expr]) => {
-        impl_test_with_all_params!([$($fn),*], [($d, $D)], [($h, $H)], [$n]);
-        impl_test_with_all_params!([$($fn),*], [$(($d_, $D_)),*], [($h, $H)], [$n]);
+    ([$($fn:tt)+], [($($d:tt)+), $($db:tt),*], [($($h:tt)+)], [$n:tt]) => {
+        impl_test_with_params!([$($fn)+], [($($d)+)], [($($h)+)], [$n]);
+        impl_test_with_params!([$($fn)+], [$($db),*], [($($h)+)], [$n]);
     };
 
-    ([$fn: ident, $($fn_: tt),*], [($d: expr, $D: ident)], [($h: expr, $H: ident)], [$n: expr]) => {
-        impl_integration_test!($fn, $d, $D, $h, $H, $n);
-        impl_test_with_all_params!([$($fn_),*], [($d, $D)], [($h, $H)], [$n]);
+    ([$f:tt, $($fn:tt),*], [($($d:tt)+)], [($($h:tt)+)], [$n:tt]) => {
+        impl_integration_test!($f, ($($d)+), ($($h)+), $n);
+        impl_test_with_params!([$($fn),*], [($($d)+)], [($($h)+)], [$n]);
     };
 
-    ([$fn: ident], [($d: expr, $D: ident)], [($h: expr, $H: ident)], [$n: expr]) => {
-        impl_integration_test!($fn, $d, $D, $h, $H, $n);
+    ([$f:tt], [($($d:tt)+)], [($($h:tt)+)], [$n:tt]) => {
+        impl_integration_test!($f, ($($d)+), ($($h)+), $n);
     };
 
     ($($other:tt)*) => {};
 }
 
-impl_test_with_all_params!(
+impl_test_with_params!(
     [
         insert_keys_then_verify_values,
         insert_keys_then_gen_and_verify_proof,
@@ -216,7 +235,13 @@ impl_test_with_all_params!(
         insert_keys_then_delete_keys_reversely,
         insert_keys_then_delete_keys_randomly
     ],
-    [("hashmap", MemoryDB), ("rocksdb", RocksDB)],
-    [("blake2b", Blake2b), ("blake3", Blake3), ("sha3", Sha3)],
+    [("hashmap", MemoryDB), ("rocksdb", RocksDB), ("sled", Sled)],
+    [
+        ("blake3", Blake3),
+        ("blake2s", Blake2s),
+        ("blake2b", Blake2b),
+        ("sha2", Sha2),
+        ("sha3", Sha3)
+    ],
     [100, 500, 1000]
 );

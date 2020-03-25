@@ -1,23 +1,9 @@
-#[macro_use]
-extern crate criterion;
-#[macro_use]
-extern crate paste;
-extern crate scopeguard;
-use criterion::{black_box, Criterion};
-use monotree::database::{MemoryDB, RocksDB};
-use monotree::hasher::{Blake2b, Blake3};
-use monotree::tree::Monotree;
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use monotree::database::*;
+use monotree::hasher::*;
 use monotree::utils::*;
-use monotree::Hash;
 use monotree::*;
 use std::fs;
-
-fn prepare(n: usize) -> (Vec<Hash>, Vec<Hash>) {
-    (0..n)
-        .map(|_| (random_bytes(HASH_LEN), random_bytes(HASH_LEN)))
-        .map(|x| (slice_to_hash(&x.0).unwrap(), slice_to_hash(&x.1).unwrap()))
-        .unzip()
-}
 
 fn insert<D: Database, H: Hasher>(
     tree: &mut Monotree<D, H>,
@@ -25,134 +11,108 @@ fn insert<D: Database, H: Hasher>(
     keys: &mut [Hash],
     leaves: &[Hash],
 ) -> Option<Hash> {
-    keys.sort();
-    tree.inserts(root.as_ref(), &keys, &leaves).unwrap()
+    tree.inserts(root.as_ref(), keys, &leaves).expect("insert")
 }
 
-fn get<D: Database, H: Hasher>(tree: &mut Monotree<D, H>, root: Option<Hash>, keys: &[Hash]) {
+fn get<D: Database, H: Hasher>(
+    tree: &mut Monotree<D, H>,
+    root: Option<Hash>,
+    keys: &mut [Hash],
+    _leaves: &[Hash],
+) {
     keys.iter().for_each(|key| {
-        tree.get(root.as_ref(), key).unwrap();
+        tree.get(root.as_ref(), key).expect("get");
     });
 }
 
-fn remove<D: Database, H: Hasher>(tree: &mut Monotree<D, H>, root: Option<Hash>, keys: &[Hash]) {
-    tree.removes(root.as_ref(), keys).unwrap();
+fn remove<D: Database, H: Hasher>(
+    tree: &mut Monotree<D, H>,
+    root: Option<Hash>,
+    keys: &mut [Hash],
+    _leaves: &[Hash],
+) {
+    tree.removes(root.as_ref(), keys).expect("remove");
 }
 
 macro_rules! impl_bench_group {
-    ($n: expr) => {
-        item_with_macros! {
-            fn [<bench_group _ $n>](c: &mut Criterion) {
-                let mut group = c.benchmark_group(format!("EntryNum_{}", stringify!($n)));
-                let (keys, leaves) = prepare($n);
+    ($n:expr) => {
+        paste::item_with_macros! {
+            fn [<bench_group_ $n>](c: &mut Criterion) {
+                let mut group = c.benchmark_group(format!("entry_num_{}", stringify!($n)));
+                let mut keys = random_hashes($n);
+                let leaves = random_hashes($n);
 
-                group.bench_function("hashmap_insert", |b| {
-                    let mut tree = Monotree::<MemoryDB, Blake2b>::new("hashmap");
-                    let root = tree.new_tree();
-                    let mut keys = keys.clone();
-                    b.iter(|| {
-                        insert(
-                            black_box(&mut tree),
-                            black_box(root),
-                            black_box(&mut keys),
-                            black_box(&leaves),
-                        )
-                    })
-                });
-
-                group.bench_function("rocksdb_insert", |b| {
-                    let dbname = hex!(random_bytes(4));
-                    let _g = scopeguard::guard((), |_| {
-                        if fs::metadata(&dbname).is_ok() {
-                            fs::remove_dir_all(&dbname).unwrap()
-                        }
-                    });
-                    let mut tree = Monotree::<RocksDB, Blake3>::new(&dbname);
-                    let root = tree.new_tree();
-                    let mut keys = keys.clone();
-                    b.iter(|| {
-                        insert(
-                            black_box(&mut tree),
-                            black_box(root),
-                            black_box(&mut keys),
-                            black_box(&leaves),
-                        )
-                    })
-                });
-
-                group.bench_function("hashmap_get", |b| {
-                    let mut tree = Monotree::<MemoryDB, Blake3>::new("hashmap");
-                    let mut root = tree.new_tree();
-                    let mut keys = keys.clone();
-                    root = insert(&mut tree, root, &mut keys, &leaves);
-                    b.iter(|| {
-                        get(
-                            black_box(&mut tree),
-                            black_box(root),
-                            black_box(&keys),
-                        )
-                    })
-                });
-
-                group.bench_function("rocksdb_get", |b| {
-                    let dbname = hex!(random_bytes(4));
-                    let _g = scopeguard::guard((), |_| {
-                        if fs::metadata(&dbname).is_ok() {
-                            fs::remove_dir_all(&dbname).unwrap()
-                        }
-                    });
-                    let mut tree = Monotree::<RocksDB, Blake3>::new(&dbname);
-                    let mut root = tree.new_tree();
-                    let mut keys = keys.clone();
-                    root = insert(&mut tree, root, &mut keys, &leaves);
-                    b.iter(|| {
-                        get(
-                            black_box(&mut tree),
-                            black_box(root),
-                            black_box(&keys),
-                        )
-                    })
-                });
-
-                group.bench_function("hashmap_remove", |b| {
-                    let mut tree = Monotree::<MemoryDB, Blake3>::new("hashmap");
-                    let mut root = tree.new_tree();
-                    let mut keys = keys.clone();
-                    root = insert(&mut tree, root, &mut keys, &leaves);
-                    keys.sort_unstable_by(|a, b| b.cmp(a));
-                    b.iter(|| {
-                        remove(
-                            black_box(&mut tree),
-                            black_box(root),
-                            black_box(&keys),
-                        )
-                    })
-                });
-
-                group.bench_function("rocksdb_remove", |b| {
-                    let dbname = hex!(random_bytes(4));
-                    let _g = scopeguard::guard((), |_| {
-                        if fs::metadata(&dbname).is_ok() {
-                            fs::remove_dir_all(&dbname).unwrap()
-                        }
-                    });
-                    let mut tree = Monotree::<RocksDB, Blake3>::new(&dbname);
-                    let mut root = tree.new_tree();
-                    let mut keys = keys.clone();
-                    root = insert(&mut tree, root, &mut keys, &leaves);
-                    keys.sort_unstable_by(|a, b| b.cmp(a));
-                    b.iter(|| {
-                        remove(
-                            black_box(&mut tree),
-                            black_box(root),
-                            black_box(&keys),
-                        )
-                    })
-                });
-
+                impl_params_bench!(
+                    {group, &mut keys, &leaves},
+                    [("hashmap", MemoryDB), ("rocksdb", RocksDB), ("sled", Sled)],
+                    [
+                        ("blake3", Blake3),
+                        ("blake2s", Blake2s),
+                        ("blake2b", Blake2b),
+                        ("sha2", Sha2),
+                        ("sha3", Sha3)
+                    ],
+                    [insert, get, remove]
+                );
                 group.finish();
             }
         }
+    };
+}
+
+macro_rules! impl_params_bench {
+    ({$($g:tt)+}, [$($db:tt)+], [$($hasher:tt)+], [$f:tt, $($fn:tt),*]) => {
+        impl_params_bench!({$($g)+}, [$($db)+], [$($hasher)+], [$f]);
+        impl_params_bench!({$($g)+}, [$($db)+], [$($hasher)+], [$($fn),*]);
+    };
+
+    ({$($g:tt)+}, [$($db:tt)+], [($($h:tt)+), $($hasher:tt),*], [$f:tt]) => {
+        impl_params_bench!({$($g)+}, [$($db)+], [($($h)+)], [$f]);
+        impl_params_bench!({$($g)+}, [$($db)+], [$($hasher),*], [$f]);
+    };
+
+    ({$($g:tt)+}, [($($d:tt)+), $($db:tt),*], [($($h:tt)+)], [$f:tt]) => {
+        impl_bench_fn!({$($g)+}, ($($d)+), ($($h)+), $f);
+        impl_params_bench!({$($g)+}, [$($db),*], [($($h)+)], [$f]);
+    };
+
+    ({$($g:tt)+}, [($($d:tt)+)], [($($h:tt)+)], [$f:tt]) => {
+        impl_bench_fn!({$($g)+}, ($($d)+), ($($h)+), $f);
+    };
+
+    ($($other:tt)*) => {};
+}
+
+macro_rules! impl_bench_fn {
+    ({$g:ident, $k:expr, $v: expr}, ($d:expr, $db:ident), ($h:expr, $hasher:ident), $fn:ident) => {
+        $g.bench_function(format!("{}_{}_{}", stringify!($fn), $d, $h), |b| {
+            let dbname = format!(".tmp/{}", hex!(random_bytes(4)));
+            let _g = scopeguard::guard((), |_| {
+                if fs::metadata(&dbname).is_ok() {
+                    fs::remove_dir_all(&dbname).unwrap()
+                }
+            });
+            let mut tree = Monotree::<$db, $hasher>::new(&dbname);
+            let mut root: Option<Hash> = None;
+            let mut keys = $k.clone();
+            root = match stringify!($fn) {
+                "get" | "remove" => insert(
+                    black_box(&mut tree),
+                    black_box(root),
+                    black_box(&mut keys),
+                    black_box($v),
+                ),
+                _ => root,
+            };
+            b.iter(|| {
+                $fn(
+                    black_box(&mut tree),
+                    black_box(root),
+                    black_box(&mut keys),
+                    black_box($v),
+                )
+            })
+        });
     };
 }
 

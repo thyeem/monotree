@@ -1,10 +1,10 @@
+//! A module for representing `BitVec` in terms of bytes slice.
 use crate::utils::*;
-use crate::Result;
+use crate::*;
 use std::ops::Range;
 
-pub type BitsLen = u16;
-
 #[derive(Debug, Clone, PartialEq)]
+/// `BitVec` implementation based on bytes slice.
 pub struct Bits<'a> {
     pub path: &'a [u8],
     pub range: Range<BitsLen>,
@@ -18,15 +18,18 @@ impl<'a> Bits<'a> {
         }
     }
 
+    /// Construct `Bits` instance by deserializing bytes slice.
     pub fn from_bytes(bytes: &'a [u8]) -> Self {
-        let start: BitsLen = bytes_to_int(&bytes[..2]);
-        let end: BitsLen = bytes_to_int(&bytes[2..4]);
+        let u = std::mem::size_of::<BitsLen>();
+        let start: BitsLen = bytes_to_int(&bytes[..u]);
+        let end: BitsLen = bytes_to_int(&bytes[u..2 * u]);
         Self {
-            path: &bytes[4..],
+            path: &bytes[2 * u..],
             range: start..end,
         }
     }
 
+    /// Serialize `Bits` into bytes.
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
         Ok([
             &self.range.start.to_be_bytes(),
@@ -36,6 +39,7 @@ impl<'a> Bits<'a> {
         .concat())
     }
 
+    /// Get the very first bit.
     pub fn first(&self) -> bool {
         bit(&self.path, self.range.start)
     }
@@ -48,6 +52,7 @@ impl<'a> Bits<'a> {
         self.len() == 0 || self.path.len() == 0
     }
 
+    /// Get the resulting `Bits` when shifted with the given size.
     pub fn shift(&self, n: BitsLen, tail: bool) -> Self {
         let (q, range) = offsets(&self.range, n, tail);
         if tail {
@@ -63,6 +68,7 @@ impl<'a> Bits<'a> {
         }
     }
 
+    /// Get length of the longest common prefix bits for the given two `Bits`.
     pub fn len_common_bits(a: &Self, b: &Self) -> BitsLen {
         len_lcp(&a.path, &a.range, &b.path, &b.range)
     }
