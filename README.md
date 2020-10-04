@@ -1,5 +1,9 @@
+<p align="center"> <img src="monotree.png" height="200"/> </p>
+
+
 [![Build Status](https://travis-ci.com/thyeem/monotree.svg?token=QYwxZ27j8uz6zsrzY6bk&branch=master)](https://travis-ci.com/thyeem/monotree)
 [![Crates.io](https://img.shields.io/crates/v/monotree.svg)](https://crates.io/crates/monotree)
+
 # Monotree
 Rust implementation of an optimized Sparse Merkle Tree.  
 This is a kind of binary-radix tree based on bitwise branching, _currently_, no nibble of bit. 
