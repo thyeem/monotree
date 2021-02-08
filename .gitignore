@@ -1,8 +1,9 @@
 *sw?
 .vscode
-.DS_Store 
+.DS_Store
 target/
 debug/
 testdb/
 .tmp/
+.md.temp
 *.o

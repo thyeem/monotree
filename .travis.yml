@@ -8,7 +8,7 @@ matrix:
     - rust: nightly
 
 install:
-    - cargo build --release 
+    - cargo build --release --features "db_rocksdb, db_sled"
 
 script:
-    - cargo test --release
+    - cargo test --release --features "db_rocksdb, db_sled"
