@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use monotree::database::*;
+use monotree::database::{rocksdb::RocksDB, sled::Sled, MemoryDB};
 use monotree::hasher::*;
 use monotree::utils::*;
 use monotree::*;

@@ -1,4 +1,4 @@
-use monotree::database::*;
+use monotree::database::rocksdb::RocksDB;
 use monotree::hasher::*;
 use monotree::utils::*;
 use monotree::*;
