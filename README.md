@@ -1,7 +1,7 @@
 <p align="center"> <img src="monotree.png" height="200"/></p>
 
 
-[![Build Status](https://travis-ci.com/thyeem/monotree.svg?token=QYwxZ27j8uz6zsrzY6bk&branch=master)](https://travis-ci.com/thyeem/monotree)
+[![Build Status](https://api.travis-ci.com/thyeem/monotree.svg?token=QYwxZ27j8uz6zsrzY6bk&branch=master)](https://app.travis-ci.com/thyeem/monotree)
 [![Crates.io](https://img.shields.io/crates/v/monotree.svg)](https://crates.io/crates/monotree)
 
 # Monotree
