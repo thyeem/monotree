@@ -1,4 +1,4 @@
-<p align="center"> <img src="monotree.png" height="200"/></p>
+<p align="center"> <img src="https://raw.githubusercontent.com/thyeem/monotree/master/monotree.png" height="200"/></p>
 
 
 [![Build Status](https://api.travis-ci.com/thyeem/monotree.svg?token=QYwxZ27j8uz6zsrzY6bk&branch=master)](https://app.travis-ci.com/thyeem/monotree)
