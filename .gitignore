@@ -1,9 +1,27 @@
-*sw?
-.vscode
+# mac
 .DS_Store
+
+# emacs
+[#]*[#]
+
+# vim
+*.sw?
+*~
+
+# vscode
+.vscode
+
+# c/c++ object file
+*.o
+
+# Makefile
+*.d
+
+# rust
 target/
 debug/
+
+# test
 testdb/
 .tmp/
-.md.temp
-*.o
+
