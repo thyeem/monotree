@@ -1,12 +1,12 @@
 [package]
 name = "monotree"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Francis Lim <thyeem@gmail.com>", "Jongwhan Lee <leejw51@gmail.com>"]
 edition = "2018"
 description = "Rust implementation of an optimized Sparse Merkle Tree"
 repository = "https://github.com/thyeem/monotree"
 readme = "README.md"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 keywords = ["sparse", "merkle", "radix", "blockchain", "merkletrie"]
 categories = ["algorithms", "data-structures", "cryptography::cryptocurrencies"]
 

@@ -11,3 +11,8 @@
 ## 0.1.4
 * Added feature-gates for rocksdb and sled
 * Moved criterion from [dependencies] to [dev-dependencies]
+
+## 0.1.5
+* Bumped up dependencies
+* Changed license to MIT
+* Changed the icon
