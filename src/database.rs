@@ -102,8 +102,8 @@ impl Database for MemoryDB {
 
 #[cfg(feature = "db_rocksdb")]
 pub mod rocksdb {
-    use crate::{Database, Errors, Result};
     use super::cache::MemCache;
+    use crate::{Database, Errors, Result};
     use rocksdb::{WriteBatch, DB};
     use std::path::Path;
     use std::sync::{Arc, Mutex};
@@ -152,21 +152,23 @@ pub mod rocksdb {
         fn put(&mut self, key: &[u8], value: Vec<u8>) -> Result<()> {
             self.cache.put(key, value.to_owned())?;
             if self.batch_on {
-                Ok(self.batch.put(key, value)?)
+                self.batch.put(key, value);
             } else {
                 let db = self.db.lock().expect("put(): rocksdb");
-                Ok(db.put(key, value)?)
+                db.put(key, value)?
             }
+            Ok(())
         }
 
         fn delete(&mut self, key: &[u8]) -> Result<()> {
             self.cache.delete(key)?;
             if self.batch_on {
-                Ok(self.batch.delete(key)?)
+                self.batch.delete(key);
             } else {
                 let db = self.db.lock().expect("remove(): rocksdb");
-                Ok(db.delete(key)?)
+                db.delete(key)?
             }
+            Ok(())
         }
 
         fn init_batch(&mut self) -> Result<()> {
@@ -190,8 +192,8 @@ pub mod rocksdb {
 
 #[cfg(feature = "db_sled")]
 pub mod sled {
-    use crate::{Database, Errors, Result};
     use super::cache::MemCache;
+    use crate::{Database, Errors, Result};
 
     /// A database using `Sled`, a pure-rust-implmented DB.
     pub struct Sled {

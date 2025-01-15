@@ -3,7 +3,6 @@ use monotree::hasher::*;
 use monotree::utils::*;
 use monotree::*;
 use std::fs;
-
 extern crate paste;
 extern crate scopeguard;
 
@@ -177,7 +176,7 @@ fn insert_keys_then_delete_keys_immediately<D: Database, H: Hasher>(
 
 macro_rules! impl_integration_test {
     ($fn:ident, ($d:expr, $db:ident), ($h:expr, $hasher:ident), $n:expr) => {
-        paste::item_with_macros! {
+        paste::item! {
             #[test]
             fn [<test_ $d _ $h _ $fn _ $n>]() -> Result<()> {
                 let dbname = format!(".tmp/{}", hex!(random_bytes(4)));

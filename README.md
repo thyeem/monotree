@@ -28,6 +28,25 @@ _Hashers include_:
 - [`SHA-2`](https://lib.rs/crates/sha2)
 - [`SHA-3 (Keccak)`](https://lib.rs/crates/sha3)
 
+## Install
+Add dependency to `Cargo.toml`
+
+```toml
+[dependencies]
+monotree = "0.2.0"
+
+# If you want to use it with specific database backends such as 'rocksdb' or 'sled',
+monotree = { version = "0.2.0", features = ["db_rocksdb", "db_sled"] }
+```
+
+or use `cargo add`
+
+```bash
+$ cargo add monotree
+
+$ cargo add monotree --features "db_rocksdb, db_sled"
+```
+
 ## Quick start
 > _from `examples/basic.rs`_
 
@@ -35,7 +54,6 @@ _Hashers include_:
 
 
 ```rust
-
 use monotree::{Monotree, Result};
 use monotree::utils::random_hash;
 

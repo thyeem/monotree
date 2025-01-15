@@ -36,7 +36,7 @@ fn remove<D: Database, H: Hasher>(
 
 macro_rules! impl_bench_group {
     ($n:expr) => {
-        paste::item_with_macros! {
+        paste::item! {
             fn [<bench_group_ $n>](c: &mut Criterion) {
                 let mut group = c.benchmark_group(format!("entry_num_{}", stringify!($n)));
                 let mut keys = random_hashes($n);

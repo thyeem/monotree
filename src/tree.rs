@@ -44,7 +44,7 @@ where
         Ok(Some(hash))
     }
 
-    /// Recursively insert a bytes (in forms of Bits) and a leaf into the tree.  
+    /// Recursively insert a bytes (in forms of Bits) and a leaf into the tree.
     ///
     /// Optimization in `monotree` is mainly to compress the path as much as possible
     /// while reducing the number of db accesses using the most intuitive model.
@@ -52,9 +52,9 @@ where
     /// this reduces the number of DB accesses from `N` to `log2(N)` in both reads and writes.
     ///
     /// Whenever invoked a `put()` call, at least, more than one `put_node()` called,
-    /// which triggers a single hash digest + a single DB write.  
+    /// which triggers a single hash digest + a single DB write.
     /// Compressing the path recudes the number of `put()` calls, which yields
-    /// reducing the number of hash function calls as well as the number of DB writes.  
+    /// reducing the number of hash function calls as well as the number of DB writes.
     ///
     /// There are four modes when putting the entries.
     /// And each of them is processed in a (recursive) `put()` call.
@@ -75,7 +75,7 @@ where
         let unit = lc.as_ref().expect("put(): left-unit");
         let n = Bits::len_common_bits(&unit.bits, &bits);
         match n {
-            n if n == 0 => self.put_node(Node::new(lc, Some(Unit { hash: leaf, bits }))),
+            0 => self.put_node(Node::new(lc, Some(Unit { hash: leaf, bits }))),
             n if n == bits.len() => self.put_node(Node::new(Some(Unit { hash: leaf, bits }), rc)),
             n if n == unit.bits.len() => {
                 let hash = &self
@@ -116,7 +116,7 @@ where
         let n = Bits::len_common_bits(&unit.bits, &bits);
         match n {
             n if n == bits.len() => Ok(Some(slice_to_hash(unit.hash))),
-            n if n == unit.bits.len() => self.find_key(&unit.hash, bits.shift(n, false)),
+            n if n == unit.bits.len() => self.find_key(unit.hash, bits.shift(n, false)),
             _ => Ok(None),
         }
     }
@@ -140,7 +140,7 @@ where
                 None => Ok(None),
             },
             n if n == unit.bits.len() => {
-                let hash = self.delete_key(&unit.hash, bits.shift(n, false))?;
+                let hash = self.delete_key(unit.hash, bits.shift(n, false))?;
                 match (hash, &rc) {
                     (None, None) => Ok(None),
                     (None, Some(_)) => self.put_node(Node::new(None, rc)),

@@ -16,7 +16,7 @@ pub struct Unit<'a> {
 /// The only component of `monotree`. In a big picture, `monotree` simply consists of structured `Node`s.
 ///
 /// # Schematic
-/// There are two types of `Node` -- ___Soft node___ and ___Hard node___.   
+/// There are two types of `Node` -- ___Soft node___ and ___Hard node___.
 /// * ___Hard___: a node that has two real cells as components. two links to child nodes.
 /// * ___Soft___: a node that has only one real cell and it has only one link going out to child node.
 /// ```
@@ -34,13 +34,13 @@ pub struct Unit<'a> {
 /// Numbers in parentheses refer to byte length.
 /// By default `HashLen = 32`, `BitsLen = 2`.
 ///
-/// _SoftNode_ = `Cell` + `0x00`(1), where    
-/// `Cell` = `hash`(`HASH_LEN`) + `path`(`< HASH_LEN`) + `range_start`(`BitsLen`) + `range_end`(`BitsLen`).   
-/// `0x00` is an indicator for soft node.  
+/// _SoftNode_ = `Cell` + `0x00`(1), where
+/// `Cell` = `hash`(`HASH_LEN`) + `path`(`< HASH_LEN`) + `range_start`(`BitsLen`) + `range_end`(`BitsLen`).
+/// `0x00` is an indicator for soft node.
 ///
-/// _HardNode_ = `Cell_L` + `Cell_R` + `0x01`(1), where    
-/// `Cell_L` = `hash_L`(`HASH_LEN`) + `path_L`(`< HASH_LEN`) + `range_L_start`(`BitsLen`) + `range_L_end`(`BitsLen`)   
-/// `Cell_R` = `path_R`(`< HASH_LEN`) _ `range_R_start`(`BitsLen`) + `range_R_end`(`BitsLen`) + `hash_R`(`HASH_LEN`).   
+/// _HardNode_ = `Cell_L` + `Cell_R` + `0x01`(1), where
+/// `Cell_L` = `hash_L`(`HASH_LEN`) + `path_L`(`< HASH_LEN`) + `range_L_start`(`BitsLen`) + `range_L_end`(`BitsLen`)
+/// `Cell_R` = `path_R`(`< HASH_LEN`) _ `range_R_start`(`BitsLen`) + `range_R_end`(`BitsLen`) + `hash_R`(`HASH_LEN`).
 /// `0x01` is an indicator for hard node.
 ///
 /// To make ***Merkle proof*** easier, we purposely placed the _hashes_ on outskirts of the serialized form.
@@ -64,7 +64,7 @@ impl<'a> Node<'a> {
 
     /// Construct `Cell`s by deserializing bytes slice.
     pub fn cells_from_bytes(bytes: &'a [u8], right: bool) -> Result<(Cell<'a>, Cell<'a>)> {
-        match Node::from_bytes(&bytes)? {
+        match Node::from_bytes(bytes)? {
             Node::Soft(cell) => Ok((cell, None)),
             Node::Hard(lc, rc) => {
                 if right {
@@ -109,7 +109,7 @@ impl<'a> Node<'a> {
                 Ok(Node::Soft(cell))
             }
             Some(&0x01) => {
-                let (lc, size) = Node::parse_bytes(&bytes, false)?;
+                let (lc, size) = Node::parse_bytes(bytes, false)?;
                 let (rc, _) = Node::parse_bytes(&bytes[size..bytes.len() - 1], true)?;
                 Ok(Node::Hard(lc, rc))
             }
@@ -120,16 +120,14 @@ impl<'a> Node<'a> {
     /// Serialize `Node` into bytes.
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
         match self {
-            Node::Soft(Some(unit)) => {
-                Ok([&unit.hash[..], &unit.bits.to_bytes()?, &[0x00]].concat())
-            }
+            Node::Soft(Some(unit)) => Ok([unit.hash, &unit.bits.to_bytes()?, &[0x00]].concat()),
             Node::Hard(Some(lu), Some(ru)) => {
                 let (lu, ru) = if ru.bits.first() { (lu, ru) } else { (ru, lu) };
                 Ok([
-                    &lu.hash[..],
+                    lu.hash,
                     &lu.bits.to_bytes()?,
                     &ru.bits.to_bytes()?,
-                    &ru.hash[..],
+                    ru.hash,
                     &[0x01],
                 ]
                 .concat())

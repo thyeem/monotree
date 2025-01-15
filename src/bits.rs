@@ -34,14 +34,14 @@ impl<'a> Bits<'a> {
         Ok([
             &self.range.start.to_be_bytes(),
             &self.range.end.to_be_bytes(),
-            &self.path[..],
+            self.path,
         ]
         .concat())
     }
 
     /// Get the very first bit.
     pub fn first(&self) -> bool {
-        bit(&self.path, self.range.start)
+        bit(self.path, self.range.start)
     }
 
     pub fn len(&self) -> BitsLen {
@@ -70,6 +70,6 @@ impl<'a> Bits<'a> {
 
     /// Get length of the longest common prefix bits for the given two `Bits`.
     pub fn len_common_bits(a: &Self, b: &Self) -> BitsLen {
-        len_lcp(&a.path, &a.range, &b.path, &b.range)
+        len_lcp(a.path, &a.range, b.path, &b.range)
     }
 }

@@ -69,8 +69,8 @@ impl Hasher for Sha2 {
     /// Currently supports 256-bit or 32-byte only.
     fn digest(&self, bytes: &[u8]) -> Hash {
         let mut hasher = sha2::Sha256::new();
-        hasher.input(bytes);
-        let hash = hasher.result();
+        hasher.update(bytes);
+        let hash = hasher.finalize();
         slice_to_hash(hash.as_slice())
     }
 }
@@ -86,8 +86,8 @@ impl Hasher for Sha3 {
     /// Currently supports 256-bit or 32-byte only.
     fn digest(&self, bytes: &[u8]) -> Hash {
         let mut hasher = sha3::Sha3_256::new();
-        hasher.input(bytes);
-        let hash = hasher.result();
+        hasher.update(bytes);
+        let hash = hasher.finalize();
         slice_to_hash(hash.as_slice())
     }
 }

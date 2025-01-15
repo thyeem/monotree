@@ -110,7 +110,7 @@ pub fn shuffle<T: Clone>(slice: &mut [T]) {
     let mut rng = rand::thread_rng();
     let s = slice.len();
     (0..s).for_each(|i| {
-        let q = rng.gen_range(0, s);
+        let q = rng.gen_range(0..s);
         slice.swap(i, q);
     });
 }
