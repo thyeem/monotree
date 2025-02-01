@@ -2,16 +2,15 @@ use monotree::utils::random_hash;
 use monotree::{Monotree, Result};
 
 fn main() -> Result<()> {
-    // Init a monotree instance
-    // by default, with 'HashMap' and 'Blake3' hash function
+    // If no database or hash function is specified,
+    // the tree defaults to using a HashMap and the Blake3 hash function.
     let mut tree = Monotree::default();
 
     // It is natural the tree root initially has 'None'
     let root = None;
 
-    // Prepare a random pair of key and leaf.
-    // random_hash() gives a fixed length of random array,
-    // where Hash -> [u8; HASH_LEN], HASH_LEN = 32
+    // Generate a random key and leaf pair.
+    // random_hash() creates a fixed-length random array of 32 bytes.
     let key = random_hash();
     let leaf = random_hash();
 
@@ -19,15 +18,40 @@ fn main() -> Result<()> {
     let root = tree.insert(root.as_ref(), &key, &leaf)?;
     assert_ne!(root, None);
 
-    // Get the leaf inserted just before. Note that the last root was used.
+    // Retrieve the leaf inserted just before. Note that the last root was used.
     let found = tree.get(root.as_ref(), &key)?;
     assert_eq!(found, Some(leaf));
 
     // Remove the entry
     let root = tree.remove(root.as_ref(), &key)?;
 
-    // surely, the tree has nothing nad the root back to 'None'
+    // The tree is empty now and the root back to 'None'
     assert_eq!(tree.get(root.as_ref(), &key)?, None);
     assert_eq!(root, None);
+
+    // Do the same thing using batch operations
+    //
+    // initialize an empty batch: prepare transaction
+    tree.prepare();
+
+    // Insert the entry (key, leaf) within the batch
+    let root = tree.insert(root.as_ref(), &key, &leaf)?;
+    assert_ne!(root, None);
+
+    // Retrieve the inserted leaf using the batch root
+    let found = tree.get(root.as_ref(), &key)?;
+    assert_eq!(found, Some(leaf));
+
+    // Remove the entry within the same batch
+    let root = tree.remove(root.as_ref(), &key)?;
+
+    // Ensure the entry was removed within the batch
+    assert_eq!(tree.get(root.as_ref(), &key)?, None);
+
+    // Commit the batch operations: commit transaction
+    tree.commit();
+
+    // Verify that the final root is `None` after commit
+    assert_eq!(tree.get(root.as_ref(), &key)?, None);
     Ok(())
 }

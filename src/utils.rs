@@ -66,7 +66,7 @@ macro_rules! perf {
                 let div = if $n == 0 { 1 } else { $n };
                 let mean = fmtime!(tock / div as u128);
                 println!("\n{}", label);
-                println!("{} loops: {}  ({}, on average)", $n, elapsed, mean);
+                println!("{} loop(s): {}  ({}, on average)", $n, elapsed, mean);
                 tock
             }
         }

@@ -19,7 +19,7 @@ pub struct Unit<'a> {
 /// There are two types of `Node` -- ___Soft node___ and ___Hard node___.
 /// * ___Hard___: a node that has two real cells as components. two links to child nodes.
 /// * ___Soft___: a node that has only one real cell and it has only one link going out to child node.
-/// ```
+/// ```text
 /// //              Root
 /// //             /    \
 /// //          NodeA   NodeB

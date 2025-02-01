@@ -4,32 +4,29 @@ use monotree::utils::*;
 use monotree::*;
 
 fn main() -> Result<()> {
-    // Init a monotree instance:
-    // manually select a db and a hasher as your preference
+    // Init a monotree instance with a database and hash function
+    //
     // Monotree::<DATABASE, HASHER>::new(DB_PATH)
-    // where DATABASE = {MemoryDB, RocksDB, Sled}
-    //         HASHER = {Blake3, Blake2s, Blake2b, Sha2, Sha3}
+    //      where DATABASE = {MemoryDB, RocksDB, Sled}
+    //            HASHER = {Blake3, Blake2s, Blake2b, Sha2, Sha3}
     let mut tree = Monotree::<RocksDB, Blake2b>::new("/tmp/monotree");
 
     // It is natural the tree root initially has 'None'
     let root = None;
 
     // Prepare 500 random pairs of key and leaf.
-    // random_hashes() gives Vec<Hash>
-    // where Hash is a fixed length of random array or [u8; HASH_LEN]
+    // random_hash(SIZE) creates a vector of fixed-length random array of 32 bytes.
     let n = 500;
     let mut keys = random_hashes(n);
     let leaves = random_hashes(n);
 
-    // Insert a bunch of entries of (key, leaf) into tree.
-    // looks quite similar with 'monotree::insert()', but for insertion using batch.
-    // 'inserts()' is much faster than 'insert()' since it's based on the following:
-    // (1) DB batch-write, (2) sorting keys before insertion, and (3) mem-cache.
+    // Insert a vector of entries of (key, leaf) into tree.
+    // 'inserts()' is significantly faster than 'insert()' for the following reason.
+    // (1) batch writes, (2) sorting keys prior to insertion, and (3) in-memory caching
     let root = tree.inserts(root.as_ref(), &keys, &leaves)?;
     assert_ne!(root, None);
 
-    // Similarly, there are methods 'gets()' and 'removes()' for batch use of
-    // 'get()' and 'remove()', respectively.
+    // Similarly, `gets()` and `removes()` also are designed for batch usage.
     let result = tree.gets(root.as_ref(), &keys)?;
     assert_eq!(result.len(), keys.len());
 
@@ -40,20 +37,20 @@ fn main() -> Result<()> {
     /////////////////////////////////////////////////////////////////////
     // `Merkle proof` secion: verifying inclusion of data (inclusion proof)
 
-    // `Monotree` has compressed representation, but it fully retains
-    // the properties of the Sparse Merkle Tree (SMT).
+    // `Monotree` has compressed representations, but it fully retains
+    // the core property of the Sparse Merkle Tree (SMT).
     // Thus, `non-inclusion proof` is quite straightforward. Just go walk down
     // the tree with a key (or a path) given. If we cannot successfully get a leaf,
     // we can assure that the leaf is not a part of the tree.
-    // The process of inclusion proof is below:
+    // The process of inclusion proof is outlined below:
 
-    // random pre-insertion for Merkle proof test
+    // random insertions for testing Merkle proof generation
     let root = tree.inserts(root.as_ref(), &keys, &leaves)?;
 
-    // pick a random key from keys among inserted just before
+    // pick a random key from the keys among inserted just before
     let key = keys[99];
 
-    // generate the Merkle proof for the root and the key
+    // generate a Merkle proof for a given root and key.
     let proof = tree.get_merkle_proof(root.as_ref(), &key)?;
 
     // To verify the proof correctly, you need to provide a hasher matched
@@ -66,6 +63,16 @@ fn main() -> Result<()> {
     // verify the Merkle proof using all those above
     let verified = verify_proof(&hasher, root.as_ref(), &leaf, proof.as_ref());
     assert_eq!(verified, true);
+
+    /////////////////////////////////////////////////////////////////////
+    // Tracking the latest root(state)
+    //
+    // set the latest state or root to the database
+    tree.set_headroot(root.as_ref());
+
+    // get the lastest state or root from the database
+    let headroot = tree.get_headroot()?;
+    assert_eq!(headroot, root);
 
     /////////////////////////////////////////////////////////////////////
     // Usage examples with some functional tests

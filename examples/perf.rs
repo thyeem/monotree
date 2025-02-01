@@ -1,4 +1,4 @@
-use monotree::database::{rocksdb::RocksDB, MemoryDB, sled::Sled};
+use monotree::database::{rocksdb::RocksDB, sled::Sled, MemoryDB};
 use monotree::hasher::*;
 use monotree::utils::*;
 use monotree::*;
@@ -39,8 +39,8 @@ macro_rules! impl_perf {
         });
         let mut tree = Monotree::<$db, $hasher>::new(&dbname);
         let mut root: Option<Hash> = None;
-        let msg = format!("{}-{}  {}", $d, $h, $n);
-        perf!(1, &msg, {
+        let msg = format!("{}-{} -> {} insertions", $d, $h, $n);
+        perf!(5, &msg, {
             root = tree.inserts(root.as_ref(), &keys, &leaves).unwrap();
         });
         assert_ne!(root, None);
@@ -58,6 +58,6 @@ fn main() {
             ("sha2", Sha2),
             ("sha3", Sha3)
         ],
-        [100_000, 500_000, 1_000_000]
+        [10_000, 50_000, 1_00_000]
     );
 }

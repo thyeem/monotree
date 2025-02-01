@@ -26,6 +26,36 @@ where
         Monotree { db, hasher }
     }
 
+    /// Retrieves the latest state (root) from the database.
+    pub fn get_headroot(&mut self) -> Result<Option<Hash>> {
+        let headroot = self.db.get(ROOT_KEY)?;
+        match headroot {
+            Some(root) => Ok(Some(slice_to_hash(&root))),
+            None => Ok(None),
+        }
+    }
+
+    /// Sets the latest state (root) to the database.
+    pub fn set_headroot(&mut self, headroot: Option<&Hash>) {
+        if let Some(root) = headroot {
+            self.db
+                .put(ROOT_KEY, root.to_vec())
+                .expect("set_headroot(): hash");
+        }
+    }
+
+    pub fn prepare(&mut self) {
+        self.db
+            .init_batch()
+            .expect("prepare(): failed to initialize batch");
+    }
+
+    pub fn commit(&mut self) {
+        self.db
+            .finish_batch()
+            .expect("commit(): failed to finalize batch");
+    }
+
     /// Insert key-leaf entry into the `monotree`. Returns a new root hash.
     pub fn insert(&mut self, root: Option<&Hash>, key: &Hash, leaf: &Hash) -> Result<Option<Hash>> {
         match root {
@@ -156,6 +186,7 @@ where
     }
 
     /// This method is intended to use the `insert()` method in batch mode.
+    /// Note that `inserts()` forces the batch to 'commit'.
     pub fn inserts(
         &mut self,
         root: Option<&Hash>,
@@ -163,12 +194,12 @@ where
         leaves: &[Hash],
     ) -> Result<Option<Hash>> {
         let indices = get_sorted_indices(keys, false);
-        self.db.init_batch()?;
+        self.prepare();
         let mut root = root.cloned();
         for i in indices.iter() {
             root = self.insert(root.as_ref(), &keys[*i], &leaves[*i])?;
         }
-        self.db.finish_batch()?;
+        self.commit();
         Ok(root)
     }
 
@@ -182,14 +213,15 @@ where
     }
 
     /// This method is intended to use the `remove()` method in batch mode.
+    /// Note that `removes()` forces the batch to 'commit'.
     pub fn removes(&mut self, root: Option<&Hash>, keys: &[Hash]) -> Result<Option<Hash>> {
         let indices = get_sorted_indices(keys, false);
         let mut root = root.cloned();
-        self.db.init_batch()?;
+        self.prepare();
         for i in indices.iter() {
             root = self.remove(root.as_ref(), &keys[*i])?;
         }
-        self.db.finish_batch()?;
+        self.commit();
         Ok(root)
     }
 

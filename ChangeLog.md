@@ -20,3 +20,8 @@
 ## 0.2.0
 - Update dependencies
 - Fix outdated syntaxes and macros
+
+## 0.3.0
+- Update dependencies
+- Fix bugs in memory-caching
+- Add functions to track the latest state: `get_headroot` and `set_headroot`.
