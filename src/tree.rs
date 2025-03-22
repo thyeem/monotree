@@ -3,7 +3,7 @@ use crate::utils::*;
 use crate::*;
 
 /// A structure for `monotree`.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Monotree<D = DefaultDatabase, H = DefaultHasher> {
     db: D,
     hasher: H,
