@@ -260,12 +260,12 @@ macro_rules! impl_test_with_params {
 
 impl_test_with_params!(
     [
-        // insert_keys_then_verify_values,
-        // insert_keys_then_gen_and_verify_proof,
-        // insert_keys_then_delete_keys_immediately,
-        // insert_keys_then_delete_keys_in_order,
-        // insert_keys_then_delete_keys_reversely,
-        // insert_keys_then_delete_keys_randomly,
+        insert_keys_then_verify_values,
+        insert_keys_then_gen_and_verify_proof,
+        insert_keys_then_delete_keys_immediately,
+        insert_keys_then_delete_keys_in_order,
+        insert_keys_then_delete_keys_reversely,
+        insert_keys_then_delete_keys_randomly,
         deterministic_ordering
     ],
     [("hashmap", MemoryDB), ("rocksdb", RocksDB), ("sled", Sled)],
