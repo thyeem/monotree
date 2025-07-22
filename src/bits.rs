@@ -1,9 +1,10 @@
 //! A module for representing `BitVec` in terms of bytes slice.
 use crate::utils::*;
 use crate::*;
+use std::cmp::Ordering;
 use std::ops::Range;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 /// `BitVec` implementation based on bytes slice.
 pub struct Bits<'a> {
     pub path: &'a [u8],
@@ -71,5 +72,49 @@ impl<'a> Bits<'a> {
     /// Get length of the longest common prefix bits for the given two `Bits`.
     pub fn len_common_bits(a: &Self, b: &Self) -> BitsLen {
         len_lcp(a.path, &a.range, b.path, &b.range)
+    }
+
+    /// Get the bit at position `i` within this Bits range
+    pub fn bit(&self, i: BitsLen) -> bool {
+        assert!(i < self.len(), "Bit index out of range");
+        bit(self.path, self.range.start + i)
+    }
+
+    /// Compare bits lexicographically (MSB to LSB)
+    pub fn lexical_cmp(&self, other: &Self) -> Ordering {
+        let min_len = std::cmp::min(self.len(), other.len());
+
+        // Compare bit by bit from start of range
+        for i in 0..min_len {
+            match (self.bit(i), other.bit(i)) {
+                (false, true) => return Ordering::Less,
+                (true, false) => return Ordering::Greater,
+                _ => continue,
+            }
+        }
+
+        // All compared bits equal, compare lengths
+        self.len().cmp(&other.len())
+    }
+}
+
+// Implement equality/ordering based on actual bit values
+impl<'a> PartialEq for Bits<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.len() == other.len() && (0..self.len()).all(|i| self.bit(i) == other.bit(i))
+    }
+}
+
+impl<'a> Eq for Bits<'a> {}
+
+impl<'a> PartialOrd for Bits<'a> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.lexical_cmp(other))
+    }
+}
+
+impl<'a> Ord for Bits<'a> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.lexical_cmp(other)
     }
 }

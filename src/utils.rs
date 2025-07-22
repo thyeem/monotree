@@ -98,7 +98,7 @@ pub fn random_hashes(n: usize) -> Vec<Hash> {
     (0..n).map(|_| random_hash()).collect()
 }
 
-/// Get a fixed lenght byte-array or `Hash` from slice.
+/// Get a fixed length byte-array or `Hash` from slice.
 pub fn slice_to_hash(slice: &[u8]) -> Hash {
     let mut hash = [0x00; HASH_LEN];
     hash.copy_from_slice(slice);

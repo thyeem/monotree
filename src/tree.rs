@@ -122,8 +122,15 @@ where
                 let (hash, bits) = (unit.hash, unit.bits.shift(n, false));
                 let lu = Unit { hash, bits };
 
+                // ENFORCE DETERMINISTIC ORDERING
+                let (left, right) = if lu.bits < ru.bits {
+                    (lu, ru)
+                } else {
+                    (ru, lu)
+                };
+
                 let hash = &self
-                    .put_node(Node::new(Some(lu), Some(ru)))?
+                    .put_node(Node::new(Some(left), Some(right)))?
                     .expect("put(): hash");
                 let bits = cloned.shift(n, true);
                 self.put_node(Node::new(Some(Unit { hash, bits }), rc))

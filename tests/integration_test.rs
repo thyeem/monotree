@@ -2,6 +2,7 @@ use monotree::database::{rocksdb::RocksDB, sled::Sled, MemoryDB};
 use monotree::hasher::*;
 use monotree::utils::*;
 use monotree::*;
+use rand::{random, Rng};
 use std::fs;
 extern crate paste;
 extern crate scopeguard;
@@ -174,6 +175,38 @@ fn insert_keys_then_delete_keys_immediately<D: Database, H: Hasher>(
     Ok(())
 }
 
+fn deterministic_ordering<D: Database, H: Hasher>(
+    mut tree: Monotree<D, H>,
+    hasher: &H,
+    root: Option<Hash>,
+    keys: &[Hash],
+    leaves: &[Hash],
+) -> Result<()> {
+    // Create a second independent tree instance
+    let mut tree1 = Monotree::<D, H>::new(&format!(".tmp/{}", hex!(random_bytes(4))));
+    let mut tree2 = Monotree::<D, H>::new(&format!(".tmp/{}", hex!(random_bytes(4))));
+
+    // Insert in normal order
+    let mut root1 = root.clone();
+    root1 = tree1.inserts(root1.as_ref(), keys, leaves)?;
+
+    // Insert in reverse order
+    let mut root2 = root.clone();
+    let reversed_keys: Vec<Hash> = keys.iter().rev().cloned().collect();
+    let reversed_leaves: Vec<Hash> = leaves.iter().rev().cloned().collect();
+    root2 = tree2.inserts(root2.as_ref(), &reversed_keys, &reversed_leaves)?;
+
+    // Verify roots match
+    assert_eq!(root1, root2, "Root hashes differ for same dataset");
+    // // // Verify removal consistency
+    for key in keys {
+        root1 = tree1.remove(root1.as_ref(), key)?;
+        root2 = tree2.remove(root2.as_ref(), key)?;
+        assert_eq!(root1, root2, "Root hashes differ after deletion");
+    }
+    Ok(())
+}
+
 macro_rules! impl_integration_test {
     ($fn:ident, ($d:expr, $db:ident), ($h:expr, $hasher:ident), $n:expr) => {
         paste::item! {
@@ -232,7 +265,8 @@ impl_test_with_params!(
         insert_keys_then_delete_keys_immediately,
         insert_keys_then_delete_keys_in_order,
         insert_keys_then_delete_keys_reversely,
-        insert_keys_then_delete_keys_randomly
+        insert_keys_then_delete_keys_randomly,
+        deterministic_ordering
     ],
     [("hashmap", MemoryDB), ("rocksdb", RocksDB), ("sled", Sled)],
     [
