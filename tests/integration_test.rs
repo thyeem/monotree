@@ -174,12 +174,96 @@ fn insert_keys_then_delete_keys_immediately<D: Database, H: Hasher>(
     Ok(())
 }
 
+fn same_root_regardless_of_insertion_order<D: Database, H: Hasher>(
+    mut tree: Monotree<D, H>,
+    _hasher: &H,
+    mut root: Option<Hash>,
+    keys: &[Hash],
+    leaves: &[Hash],
+) -> Result<()> {
+    for by in (1..64).chain(64..keys.len() + 1).step_by(10) {
+        let k = &keys[0..by];
+        let v = &leaves[0..by];
+
+        // insert in original order
+        root = tree.inserts(root.as_ref(), k, v)?;
+        let root_inorder = root.unwrap();
+
+        // remove all to get back to empty tree
+        for key in k.iter() {
+            root = tree.remove(root.as_ref(), key)?;
+        }
+        assert_eq!(root, None);
+
+        // shuffle indices for different insertion order
+        let mut idx: Vec<usize> = (0..k.len()).collect();
+        shuffle(&mut idx);
+
+        // insert in different order
+        for &i in &idx {
+            root = tree.insert(root.as_ref(), &k[i], &v[i])?;
+        }
+        let root_shuffled = root.unwrap();
+
+        // assert same root regardless of insertion order
+        assert_eq!(root_inorder, root_shuffled);
+
+        // prepare for next test
+        for key in k.iter() {
+            root = tree.remove(root.as_ref(), key)?;
+        }
+        assert_eq!(root, None);
+    }
+    Ok(())
+}
+fn same_root_regardless_of_deletion_order<D: Database, H: Hasher>(
+    mut tree: Monotree<D, H>,
+    _hasher: &H,
+    mut root: Option<Hash>,
+    keys: &[Hash],
+    leaves: &[Hash],
+) -> Result<()> {
+    // populate the trie for deletion test
+    root = tree.inserts(root.as_ref(), keys, leaves)?;
+    let root_orig = root;
+
+    for by in (1..64).chain(64..keys.len() + 1).step_by(10) {
+        let k = &keys[0..by];
+        let v = &leaves[0..by];
+
+        // remove keys in original order
+        root = tree.removes(root.as_ref(), k)?;
+        let root_inorder = root.unwrap();
+
+        // back to the previous state
+        root = tree.inserts(root.as_ref(), k, v)?;
+        assert_eq!(root, root_orig);
+
+        // shuffle indices for different deletion order
+        let mut idx: Vec<usize> = (0..k.len()).collect();
+        shuffle(&mut idx);
+
+        // delete keys in different order
+        for &i in &idx {
+            root = tree.remove(root.as_ref(), &k[i])?;
+        }
+        let root_shuffled = root.unwrap();
+
+        // assert same root regardless of deletion order
+        assert_eq!(root_inorder, root_shuffled);
+
+        // prepare for next test
+        root = root_orig;
+    }
+    Ok(())
+}
+
 macro_rules! impl_integration_test {
     ($fn:ident, ($d:expr, $db:ident), ($h:expr, $hasher:ident), $n:expr) => {
         paste::item! {
             #[test]
             fn [<test_ $d _ $h _ $fn _ $n>]() -> Result<()> {
-                let dbname = format!(".tmp/{}", hex!(random_bytes(4)));
+                let dbname = format!("/tmp/{}", hex!(random_bytes(4)));
                 let _g = scopeguard::guard((), |_| {
                     if fs::metadata(&dbname).is_ok() {
                         fs::remove_dir_all(&dbname).unwrap()
@@ -232,7 +316,9 @@ impl_test_with_params!(
         insert_keys_then_delete_keys_immediately,
         insert_keys_then_delete_keys_in_order,
         insert_keys_then_delete_keys_reversely,
-        insert_keys_then_delete_keys_randomly
+        insert_keys_then_delete_keys_randomly,
+        same_root_regardless_of_insertion_order,
+        same_root_regardless_of_deletion_order
     ],
     [("hashmap", MemoryDB), ("rocksdb", RocksDB), ("sled", Sled)],
     [

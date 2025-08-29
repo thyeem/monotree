@@ -31,10 +31,24 @@ impl<'a> Bits<'a> {
 
     /// Serialize `Bits` into bytes.
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        let start = (self.range.start / 8) as usize;
+        let end = self.range.end.div_ceil(8) as usize;
+        let mut path = self.path[start..end].to_owned();
+        let r = (self.range.start % 8) as u8;
+        if r != 0 {
+            let mask = 0xffu8 >> r;
+            path[0] &= mask;
+        }
+        let r = (self.range.end % 8) as u8;
+        if r != 0 {
+            let mask = 0xffu8 << (8 - r);
+            let last = path.len() - 1;
+            path[last] &= mask;
+        }
         Ok([
             &self.range.start.to_be_bytes(),
             &self.range.end.to_be_bytes(),
-            self.path,
+            &path[..],
         ]
         .concat())
     }
@@ -52,19 +66,25 @@ impl<'a> Bits<'a> {
         self.len() == 0 || self.path.len() == 0
     }
 
-    /// Get the resulting `Bits` when shifted with the given size.
-    pub fn shift(&self, n: BitsLen, tail: bool) -> Self {
-        let (q, range) = offsets(&self.range, n, tail);
-        if tail {
-            Self {
-                path: &self.path[..q as usize],
-                range,
-            }
-        } else {
-            Self {
-                path: &self.path[q as usize..],
-                range,
-            }
+    /// Get the first `n` bits.
+    pub fn take(&self, n: BitsLen) -> Self {
+        let x = self.range.start + n;
+        let q = nbytes_across(self.range.start, x);
+        let range = self.range.start..x;
+        Self {
+            path: &self.path[..q as usize],
+            range,
+        }
+    }
+
+    /// Skip the first `n` bits.
+    pub fn drop(&self, n: BitsLen) -> Self {
+        let x = self.range.start + n;
+        let q = x / 8;
+        let range = x % 8..self.range.end - 8 * (x / 8);
+        Self {
+            path: &self.path[q as usize..],
+            range,
         }
     }
 

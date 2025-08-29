@@ -75,7 +75,7 @@ macro_rules! perf {
 
 /// Cast from a typed scalar to another based on `num_traits`
 pub fn cast<T: NumCast, U: NumCast>(n: T) -> U {
-    NumCast::from(n).expect("cast(): Numcast")
+    NumCast::from(n).unwrap()
 }
 
 /// Generate a random byte based on `rand::random`.
@@ -98,7 +98,7 @@ pub fn random_hashes(n: usize) -> Vec<Hash> {
     (0..n).map(|_| random_hash()).collect()
 }
 
-/// Get a fixed lenght byte-array or `Hash` from slice.
+/// Get a fixed length byte-array or `Hash` from slice.
 pub fn slice_to_hash(slice: &[u8]) -> Hash {
     let mut hash = [0x00; HASH_LEN];
     hash.copy_from_slice(slice);
@@ -141,33 +141,25 @@ where
     cast(count)
 }
 
+static BIT_MASKS: [u8; 8] = [0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01];
+
 /// Get `i`-th bit from bytes slice. Index `i` starts from 0.
+#[inline]
 pub fn bit<T: PrimInt + NumCast>(bytes: &[u8], i: T) -> bool {
-    let q = i.to_usize().expect("bit(): usize") / 8;
-    let r = i.to_u8().expect("bit(): u8") % 8;
-    (bytes[q] >> (7 - r)) & 0x01 == 0x01
+    let i_usize = i.to_usize().unwrap();
+    let q = i_usize >> 3;
+    let r = i_usize & 7;
+    if q >= bytes.len() {
+        return false;
+    }
+    bytes[q] & BIT_MASKS[r] != 0
 }
 
 /// Get the required length of bytes from a `Range`, bits indices across the bytes.
 pub fn nbytes_across<T: PrimInt + NumCast>(start: T, end: T) -> T {
-    let n = (end - (start - start % cast(8))) / cast(8);
-    if end % cast(8) == cast(0) {
-        n
-    } else {
-        n + cast(1)
-    }
-}
-
-/// Adjust the bytes representation for `Bits` when shifted.
-/// Returns a bytes shift, `n` and thereby resulting shifted range, `R`.
-pub fn offsets<T: PrimInt + NumCast>(range: &Range<T>, n: T, tail: bool) -> (T, Range<T>) {
-    let x = range.start + n;
-    let e: T = cast(8);
-    if tail {
-        (nbytes_across(range.start, x), range.start..x)
-    } else {
-        (x / e, x % e..range.end - e * (x / e))
-    }
+    let eight = cast(8);
+    let bits = end - (start - start % eight);
+    (bits + eight - T::one()) / eight
 }
 
 /// Convert big-endian bytes into base10 or decimal number.
@@ -197,7 +189,6 @@ pub fn bits_to_usize(bits: &[bool]) -> usize {
     let l = bits.len();
     (0..l).fold(0, |sum, i| sum + ((bits[i] as usize) << (l - 1 - i)))
 }
-
 /// Convert a bytes slice into a Vec of bit.
 pub fn bytes_to_bits(bytes: &[u8]) -> Vec<bool> {
     bytes_to_slicebit(bytes, &(0..bytes.len() * 8))
@@ -238,16 +229,6 @@ mod tests {
         assert_eq!(nbytes_across(5, 9), 2);
         assert_eq!(nbytes_across(9, 16), 1);
         assert_eq!(nbytes_across(7, 19), 3);
-    }
-
-    #[test]
-    fn test_offsets() {
-        assert_eq!(offsets(&(0..8), 1, false), (0, 1..8));
-        assert_eq!(offsets(&(0..8), 1, true), (1, 0..1));
-        assert_eq!(offsets(&(3..20), 10, false), (1, 5..12));
-        assert_eq!(offsets(&(3..20), 10, true), (2, 3..13));
-        assert_eq!(offsets(&(9..16), 5, false), (1, 6..8));
-        assert_eq!(offsets(&(9..16), 5, true), (1, 9..14));
     }
 
     #[test]

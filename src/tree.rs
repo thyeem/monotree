@@ -40,20 +40,20 @@ where
         if let Some(root) = headroot {
             self.db
                 .put(ROOT_KEY, root.to_vec())
-                .expect("set_headroot(): hash");
+                .expect("set_headroot: hash");
         }
     }
 
     pub fn prepare(&mut self) {
         self.db
             .init_batch()
-            .expect("prepare(): failed to initialize batch");
+            .expect("prepare: failed to initialize batch");
     }
 
     pub fn commit(&mut self) {
         self.db
             .finish_batch()
-            .expect("commit(): failed to finalize batch");
+            .expect("commit: failed to finalize batch");
     }
 
     /// Insert key-leaf entry into the `monotree`. Returns a new root hash.
@@ -91,42 +91,56 @@ where
     /// The number in parenthesis refers to the minimum of DB access and hash fn call required.
     ///
     /// * set-aside (1)
-    ///     putting the leaf to the next node in the current depth.
+    ///   putting the leaf to the next node in the current depth.
     /// * replacement (1)
-    ///     replacement the existing node on the path with the new leaf.
+    ///   replacement the existing node on the path with the new leaf.
     /// * consume & pass-over (2+)
-    ///     consuming the path on the way, then pass the rest of work to their child node.
+    ///   consuming the path on the way, then pass the rest of work to their child node.
     /// * split-node (2)
-    ///     immediately split node into two with the longest common prefix,
-    ///     then wind the recursive stack from there returning resulting hashes.
+    ///   immediately split node into two with the longest common prefix,
+    ///   then wind the recursive stack from there returning resulting hashes.
     fn put(&mut self, root: &[u8], bits: Bits, leaf: &[u8]) -> Result<Option<Hash>> {
-        let bytes = self.db.get(root)?.expect("bytes");
-        let (lc, rc) = Node::cells_from_bytes(&bytes, bits.first())?;
-        let unit = lc.as_ref().expect("put(): left-unit");
+        let bytes = self.db.get(root)?.expect("put: bytes");
+        let (left, right) = Node::cells_from_bytes(&bytes, bits.first())?;
+        let unit = left.as_ref().expect("put: left-unit");
         let n = Bits::len_common_bits(&unit.bits, &bits);
         match n {
-            0 => self.put_node(Node::new(lc, Some(Unit { hash: leaf, bits }))),
-            n if n == bits.len() => self.put_node(Node::new(Some(Unit { hash: leaf, bits }), rc)),
+            0 => self.put_node(Node::new(left, Some(Unit { hash: leaf, bits }))),
+            n if n == bits.len() => {
+                self.put_node(Node::new(Some(Unit { hash: leaf, bits }), right))
+            }
             n if n == unit.bits.len() => {
                 let hash = &self
-                    .put(unit.hash, bits.shift(n, false), leaf)?
-                    .expect("put(): hash");
-                let unit = unit.to_owned();
-                self.put_node(Node::new(Some(Unit { hash, ..unit }), rc))
+                    .put(unit.hash, bits.drop(n), leaf)?
+                    .expect("put: consume & pass-over");
+                self.put_node(Node::new(
+                    Some(Unit {
+                        hash,
+                        bits: unit.bits.to_owned(),
+                    }),
+                    right,
+                ))
             }
             _ => {
-                let bits = bits.shift(n, false);
-                let ru = Unit { hash: leaf, bits };
-
-                let (cloned, unit) = (unit.bits.clone(), unit.to_owned());
-                let (hash, bits) = (unit.hash, unit.bits.shift(n, false));
-                let lu = Unit { hash, bits };
-
                 let hash = &self
-                    .put_node(Node::new(Some(lu), Some(ru)))?
-                    .expect("put(): hash");
-                let bits = cloned.shift(n, true);
-                self.put_node(Node::new(Some(Unit { hash, bits }), rc))
+                    .put_node(Node::new(
+                        Some(Unit {
+                            hash: unit.hash,
+                            bits: unit.bits.drop(n),
+                        }),
+                        Some(Unit {
+                            hash: leaf,
+                            bits: bits.drop(n),
+                        }),
+                    ))?
+                    .expect("put: split-node");
+                self.put_node(Node::new(
+                    Some(Unit {
+                        hash,
+                        bits: unit.bits.take(n),
+                    }),
+                    right,
+                ))
             }
         }
     }
@@ -140,13 +154,13 @@ where
     }
 
     fn find_key(&mut self, root: &[u8], bits: Bits) -> Result<Option<Hash>> {
-        let bytes = self.db.get(root)?.expect("bytes");
+        let bytes = self.db.get(root)?.expect("find_key: bytes");
         let (cell, _) = Node::cells_from_bytes(&bytes, bits.first())?;
-        let unit = cell.as_ref().expect("find_key(): left-unit");
+        let unit = cell.as_ref().expect("find_key: left-unit");
         let n = Bits::len_common_bits(&unit.bits, &bits);
         match n {
             n if n == bits.len() => Ok(Some(slice_to_hash(unit.hash))),
-            n if n == unit.bits.len() => self.find_key(unit.hash, bits.shift(n, false)),
+            n if n == unit.bits.len() => self.find_key(unit.hash, bits.drop(n)),
             _ => Ok(None),
         }
     }
@@ -161,23 +175,23 @@ where
 
     fn delete_key(&mut self, root: &[u8], bits: Bits) -> Result<Option<Hash>> {
         let bytes = self.db.get(root)?.expect("bytes");
-        let (lc, rc) = Node::cells_from_bytes(&bytes, bits.first())?;
-        let unit = lc.as_ref().expect("delete_key(): left-unit");
+        let (left, right) = Node::cells_from_bytes(&bytes, bits.first())?;
+        let unit = left.as_ref().expect("delete_key: left-unit");
         let n = Bits::len_common_bits(&unit.bits, &bits);
         match n {
-            n if n == bits.len() => match rc {
-                Some(_) => self.put_node(Node::new(None, rc)),
+            n if n == bits.len() => match right {
+                Some(_) => self.put_node(Node::new(None, right)),
                 None => Ok(None),
             },
             n if n == unit.bits.len() => {
-                let hash = self.delete_key(unit.hash, bits.shift(n, false))?;
-                match (hash, &rc) {
+                let hash = self.delete_key(unit.hash, bits.drop(n))?;
+                match (hash, &right) {
                     (None, None) => Ok(None),
-                    (None, Some(_)) => self.put_node(Node::new(None, rc)),
+                    (None, Some(_)) => self.put_node(Node::new(None, right)),
                     (Some(ref hash), _) => {
                         let unit = unit.to_owned();
-                        let lc = Some(Unit { hash, ..unit });
-                        self.put_node(Node::new(lc, rc))
+                        let left = Some(Unit { hash, ..unit });
+                        self.put_node(Node::new(left, right))
                     }
                 }
             }
@@ -237,7 +251,7 @@ where
     fn gen_proof(&mut self, root: &[u8], bits: Bits, proof: &mut Proof) -> Result<Option<Proof>> {
         let bytes = self.db.get(root)?.expect("bytes");
         let (cell, _) = Node::cells_from_bytes(&bytes, bits.first())?;
-        let unit = cell.as_ref().expect("gen_proof(): left-unit");
+        let unit = cell.as_ref().expect("gen_proof: left-unit");
         let n = Bits::len_common_bits(&unit.bits, &bits);
         match n {
             n if n == bits.len() => {
@@ -246,7 +260,7 @@ where
             }
             n if n == unit.bits.len() => {
                 proof.push(self.encode_proof(&bytes, bits.first())?);
-                self.gen_proof(unit.hash, bits.shift(n, false), proof)
+                self.gen_proof(unit.hash, bits.drop(n), proof)
             }
             _ => Ok(None),
         }
@@ -293,7 +307,7 @@ pub fn verify_proof<H: Hasher>(
                     hash = hasher.digest(&o);
                 }
             });
-            root.expect("verify_proof(): root") == &hash
+            root.expect("verify_proof: root") == &hash
         }
     }
 }

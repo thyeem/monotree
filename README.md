@@ -4,9 +4,11 @@
 [![Crates.io](https://img.shields.io/crates/v/monotree.svg)](https://crates.io/crates/monotree)
 
 # Monotree
-Rust implementation of an optimized Sparse Merkle Tree.
-This is a kind of binary-radix tree based on bitwise branching, _currently_, no nibble of bit.
-For now, branching unit is just ___a single bit___, _neither a 4-bit nor a byte nibble_.
+Rust implementation of an optimized Sparse Merkle Tree.   
+This is a kind of binary-radix tree based on bitwise branching, _currently_, no nibble of bit.   
+For now, branching unit is just ___a single bit___, _neither a 4-bit nor a byte nibble_.  
+
+See [`monotree.py`](https://github.com/thyeem/compare-sparse-merkle-tries/blob/main/monotree.py) for a pure _Python_ implementation of `monotree`.
 
 ## Features
 - Very __simple__ and __lightweight__, but __fast__ and __robust__.
@@ -33,10 +35,10 @@ Add dependency to `Cargo.toml`
 
 ```toml
 [dependencies]
-monotree = "0.3.0"
+monotree = "0.4.0"
 
 # If you want to use it with specific database backends such as 'rocksdb' or 'sled',
-monotree = { version = "0.3.0", features = ["db_rocksdb", "db_sled"] }
+monotree = { version = "0.4.0", features = ["db_rocksdb", "db_sled"] }
 ```
 
 or use `cargo add`

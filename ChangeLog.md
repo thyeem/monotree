@@ -25,3 +25,9 @@
 - Update dependencies
 - Fix bugs in memory-caching
 - Add functions to track the latest state: `get_headroot` and `set_headroot`.
+
+## 0.4.0
+- Update dependencies
+- Fixed bug where root hash depended on insertion order for small numbers of key-value pairs.
+- Fix bugs in `Bits` serialization.
+- Optimize `bit` a bit.

@@ -138,14 +138,14 @@ pub mod rocksdb {
 
     impl From<rocksdb::Error> for Errors {
         fn from(err: rocksdb::Error) -> Self {
-            Errors::new(&err.to_string())
+            Errors::new(err.as_ref())
         }
     }
 
     impl Database for RocksDB {
         fn new(dbpath: &str) -> Self {
             let db = Arc::new(Mutex::new(
-                DB::open_default(Path::new(dbpath)).expect("new(): rocksdb"),
+                DB::open_default(Path::new(dbpath)).expect("new: rocksdb"),
             ));
             Self {
                 db,
@@ -159,7 +159,7 @@ pub mod rocksdb {
             if self.cache.contains(key) {
                 return Ok(self.cache.get(key));
             }
-            let db = self.db.lock().expect("get(): rocksdb");
+            let db = self.db.lock().expect("get: rocksdb");
             match db.get(key)? {
                 Some(value) => {
                     self.cache.put(key, value.to_owned());
@@ -174,7 +174,7 @@ pub mod rocksdb {
             if self.batch_on {
                 self.batch.put(key, value);
             } else {
-                let db = self.db.lock().expect("put(): rocksdb");
+                let db = self.db.lock().expect("put: rocksdb");
                 db.put(key, value)?
             }
             Ok(())
@@ -185,7 +185,7 @@ pub mod rocksdb {
             if self.batch_on {
                 self.batch.delete(key);
             } else {
-                let db = self.db.lock().expect("remove(): rocksdb");
+                let db = self.db.lock().expect("remove: rocksdb");
                 db.delete(key)?
             }
             Ok(())
@@ -204,7 +204,7 @@ pub mod rocksdb {
             self.batch_on = false;
             if !self.batch.is_empty() {
                 let batch = std::mem::take(&mut self.batch);
-                let db = self.db.lock().expect("write_batch(): rocksdb");
+                let db = self.db.lock().expect("write_batch: rocksdb");
                 db.write(batch)?;
             }
             Ok(())
@@ -240,7 +240,7 @@ pub mod sled {
 
     impl Database for Sled {
         fn new(dbpath: &str) -> Self {
-            let db = sled::open(dbpath).expect("new(): sledDB");
+            let db = sled::open(dbpath).expect("new: sledDB");
             Self {
                 db,
                 batch: sled::Batch::default(),

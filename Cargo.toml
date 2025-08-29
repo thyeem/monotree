@@ -1,6 +1,6 @@
 [package]
 name = "monotree"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Taeho Francis Lim <thyeem@gmail.com>", "Jongwhan Lee <leejw51@gmail.com>"]
 edition = "2021"
 description = "Rust implementation of an optimized Sparse Merkle Tree"
